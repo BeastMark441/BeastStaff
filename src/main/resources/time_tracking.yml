@@ -1,0 +1,23 @@
+# BeastStaff Time Tracking Data
+# Этот файл автоматически создается и обновляется плагином
+# Не редактируйте его вручную!
+
+# Структура данных:
+# sessions:
+#   uuid-игрока:
+#     session-id:
+#       player_name: "Имя игрока"
+#       status: "Статус"
+#       start_time: 1234567890
+#       end_time: 1234567890
+#       duration: 3600000
+
+sessions:
+  # Пример структуры данных сессий:
+  # 550e8400-e29b-41d4-a716-446655440000:
+  #   1234567890:
+  #     player_name: "PlayerName"
+  #     status: "В работе"
+  #     start_time: 1234567890
+  #     end_time: 1234567890
+  #     duration: 3600000

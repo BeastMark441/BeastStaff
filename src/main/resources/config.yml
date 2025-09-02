@@ -1,0 +1,142 @@
+# BeastStaff Configuration
+# Автор: BeastMark
+
+# Настройки уведомлений
+notifications:
+  # Уведомлять о входе персонала
+  join-notifications: true
+  # Уведомлять о выходе персонала
+  quit-notifications: true
+  # Уведомлять только администраторов
+  admin-only: false
+
+# Настройки сообщений
+messages:
+  prefix: "§6[BeastStaff] §r"
+  no-permission: "§cУ вас нет прав для использования этой команды!"
+  player-not-found: "§cИгрок {player} не найден!"
+  player-already-staff: "§cИгрок {player} уже является персоналом!"
+  player-not-staff: "§cИгрок {player} не является персоналом!"
+  player-added: "§aИгрок {player} добавлен в персонал с рангом {rank}!"
+  player-removed: "§aИгрок {player} удален из персонала!"
+  config-reloaded: "§aКонфигурация перезагружена!"
+  staff-list-empty: "§eСписок персонала пуст!"
+  staff-list-header: "§6Список персонала:"
+  staff-info-header: "§6Информация о {player}:"
+  staff-info-rank: "§7Ранг: §f{rank}"
+  staff-info-join-date: "§7Дата добавления: §f{date}"
+
+# Настройки рангов
+ranks:
+  # Доступные ранги персонала
+  available:
+    - "Модератор"
+    - "Администратор"
+    - "Старший Администратор"
+    - "Владелец"
+  
+  # Цвета рангов (опционально)
+  colors:
+    "Модератор": "§a"
+    "Администратор": "§c"
+    "Старший Администратор": "§4"
+    "Владелец": "§6"
+
+# Настройки учёта времени
+time-tracking:
+  # Доступные статусы для сотрудников
+  statuses:
+    - "В работе"
+    - "AFK"
+    - "Не в работе"
+    - "Перерыв"
+    - "Совещание"
+    - "Обучение"
+  
+  # Автоматическое управление статусами
+  auto-management:
+    # Автоматически переводить в "Не в работе" при выходе
+    auto-offline-on-quit: true
+    # Автоматически переводить в "Не в работе" при кике
+    auto-offline-on-kick: true
+    # Восстанавливать статус при входе
+    restore-status-on-join: true
+  
+  # Настройки статистики
+  statistics:
+    # Периоды по умолчанию для статистики (в днях)
+    default-periods:
+      today: 1
+      week: 7
+      month: 30
+      year: 365
+    
+    # Максимальное количество записей для хранения
+    max-records-per-player: 1000
+
+# Настройки базы данных
+database:
+  # Тип хранения данных (file/mysql/sqlite/h2)
+  type: "file"
+  
+  # Настройки MySQL (используется только если type: mysql)
+  mysql:
+    host: "localhost"
+    port: 3306
+    database: "beaststaff"
+    username: "root"
+    password: "password"
+    table-prefix: "beaststaff_"
+  
+  # Настройки SQLite (используется только если type: sqlite)
+  sqlite:
+    # Файл будет создан автоматически в папке плагина
+    filename: "beaststaff.db"
+  
+  # Настройки H2 (используется только если type: h2)
+  h2:
+    # Файл будет создан автоматически в папке плагина
+    filename: "beaststaff"
+
+# Настройки логирования
+logging:
+  # Логировать действия с персоналом
+  log-staff-actions: true
+  # Логировать входы/выходы персонала
+  log-staff-joins: true
+  # Логировать изменения статусов
+  log-status-changes: true
+  # Логировать запросы к базе данных
+  log-database-queries: false
+
+# Настройки интеграций
+integrations:
+  # PlaceholderAPI интеграция
+  placeholderapi:
+    enabled: true
+    # Доступные placeholder'ы:
+    # %beaststaff_status% - текущий статус игрока
+    # %beaststaff_status_color% - цвет статуса
+    # %beaststaff_work_time_today% - время работы за сегодня
+    # %beaststaff_work_time_week% - время работы за неделю
+    # %beaststaff_work_time_month% - время работы за месяц
+    # %beaststaff_total_work_time% - общее время работы
+    # %beaststaff_is_working% - работает ли игрок сейчас
+    # %beaststaff_current_session_time% - время текущей сессии
+  
+  # Telegram интеграция (опционально)
+  telegram:
+    enabled: false
+    bot-token: "YOUR_BOT_TOKEN"
+    # ID канала или группы (например: -1001234567890)
+    chat-id: "YOUR_CHAT_ID"
+    # Уведомления о смене статусов
+    notify-status-changes: true
+    # Уведомления о входе/выходе персонала
+    notify-joins-quits: true
+    # Только для администраторов
+    admin-only: false
+    # Персональные уведомления
+    personal-notifications: true
+    # Отправлять уведомления в общий канал
+    send-to-channel: true

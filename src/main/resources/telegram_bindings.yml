@@ -1,0 +1,9 @@
+# BeastStaff Telegram Bindings
+# Автор: BeastMark
+# 
+# Этот файл содержит привязки игроков к их Telegram аккаунтам
+# Формат: UUID игрока -> Telegram ID
+
+bindings:
+  # Пример:
+  # "12345678-1234-1234-1234-123456789012": "123456789"

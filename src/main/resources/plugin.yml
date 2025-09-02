@@ -1,0 +1,37 @@
+name: BeastStaff
+version: '${project.version}'
+main: ru.beastmark.BeastStaff
+api-version: '1.16'
+author: BeastMark
+description: Minecraft plugin for staff management and time tracking
+website: https://github.com/BeastMark441/BeastStaff
+
+commands:
+  beaststaff:
+    description: Основная команда плагина BeastStaff
+    usage: /beaststaff <add|remove|list|info|reload|menu|status|stats|allstats|setstatus> [игрок] [ранг/статус]
+    permission: beaststaff.admin
+    permission-message: §c[BeastStaff] У вас нет прав для использования этой команды!
+  
+  bs:
+    description: Сокращенная команда для BeastStaff
+    usage: /bs <команда> [аргументы]
+    permission: beaststaff.staff
+    permission-message: §c[BeastStaff] У вас нет прав для использования этой команды!
+
+permissions:
+  beaststaff.admin:
+    description: Полный доступ к командам BeastStaff
+    default: op
+  beaststaff.staff:
+    description: Доступ к командам персонала (меню статусов, статистика)
+    default: op
+  beaststaff.notify:
+    description: Получать уведомления о входе/выходе персонала
+    default: op
+  beaststaff.time.admin:
+    description: Административные права для учёта времени
+    default: op
+  beaststaff.time.stats:
+    description: Просмотр статистики времени работы
+    default: op
