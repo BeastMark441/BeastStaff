@@ -24,7 +24,17 @@ public class StaffCommand implements CommandExecutor, TabCompleter {
     
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        if (!sender.hasPermission("beaststaff.admin")) {
+        // Проверяем права доступа (admin для beaststaff, staff для bs)
+        boolean isAdmin = sender.hasPermission("beaststaff.admin");
+        boolean isStaff = sender.hasPermission("beaststaff.staff");
+        
+        // Для команды /bs достаточно прав staff, для /beaststaff нужны права admin
+        if (label.equalsIgnoreCase("bs") && !isStaff && !isAdmin) {
+            sender.sendMessage("§c[BeastStaff] У вас нет прав для использования этой команды!");
+            return true;
+        }
+        
+        if (label.equalsIgnoreCase("beaststaff") && !isAdmin) {
             sender.sendMessage("§c[BeastStaff] У вас нет прав для использования этой команды!");
             return true;
         }

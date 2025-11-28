@@ -1,7 +1,7 @@
 name: BeastStaff
 version: '${project.version}'
 main: ru.beastmark.BeastStaff
-api-version: '1.16'
+api-version: '1.21'
 author: BeastMark
 description: Minecraft plugin for staff management and time tracking
 website: https://github.com/BeastMark441/BeastStaff

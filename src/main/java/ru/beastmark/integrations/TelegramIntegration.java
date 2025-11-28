@@ -8,9 +8,11 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
+import java.net.URI;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 import java.util.logging.Level;
 
 public class TelegramIntegration {
@@ -38,31 +40,72 @@ public class TelegramIntegration {
         this.personalNotifications = config.getBoolean("integrations.telegram.personal-notifications", true);
         this.sendToChannel = config.getBoolean("integrations.telegram.send-to-channel", true);
         
-        if (enabled && (botToken.isEmpty() || chatId.isEmpty())) {
-            plugin.getLogger().warning("Telegram интеграция включена, но токен или chat_id не настроены!");
+        // Проверка на плейсхолдеры
+        if (botToken.equals("YOUR_BOT_TOKEN") || botToken.isEmpty()) {
+            botToken = "";
+        }
+        // Chat ID теперь опциональный - убираем проверку на плейсхолдер
+        if (chatId != null && chatId.equals("YOUR_CHAT_ID")) {
+            chatId = "";
         }
         
         if (enabled) {
+            boolean hasToken = !botToken.isEmpty();
+            
+            if (!hasToken) {
+                plugin.getLogger().warning("═══════════════════════════════════════");
+                plugin.getLogger().warning("⚠️ Telegram интеграция включена, но токен не настроен!");
+                plugin.getLogger().warning("Для работы необходимо:");
+                plugin.getLogger().warning("1. Получить токен бота от @BotFather");
+                plugin.getLogger().warning("2. Указать его в config.yml: integrations.telegram.bot-token");
+                plugin.getLogger().warning("═══════════════════════════════════════");
+            }
+            
             plugin.getLogger().info("Telegram интеграция инициализирована:");
-            plugin.getLogger().info("- Bot Token: " + (botToken.isEmpty() ? "НЕ НАСТРОЕН" : "НАСТРОЕН"));
-            plugin.getLogger().info("- Chat ID: " + (chatId.isEmpty() ? "НЕ НАСТРОЕН" : chatId));
+            plugin.getLogger().info("- Bot Token: " + (hasToken ? "✅ НАСТРОЕН" : "❌ НЕ НАСТРОЕН"));
+            plugin.getLogger().info("- Chat ID: " + (chatId == null || chatId.isEmpty() ? "ℹ️ Не указан (бот работает только для личных сообщений)" : "✅ " + chatId));
             plugin.getLogger().info("- Notify Status Changes: " + notifyStatusChanges);
             plugin.getLogger().info("- Notify Joins/Quits: " + notifyJoinsQuits);
             plugin.getLogger().info("- Personal Notifications: " + personalNotifications);
             plugin.getLogger().info("- Send to Channel: " + sendToChannel);
+            
+            if (hasToken && (chatId == null || chatId.isEmpty())) {
+                plugin.getLogger().info("ℹ️ Chat ID не указан - бот будет работать только для личных сообщений");
+                plugin.getLogger().info("ℹ️ Для отправки в канал/группу укажите chat-id в config.yml");
+            }
         }
     }
     
     public boolean isEnabled() {
-        return enabled && !botToken.isEmpty() && !chatId.isEmpty();
+        return enabled && !botToken.isEmpty();
+    }
+    
+    public boolean hasChatId() {
+        return chatId != null && !chatId.isEmpty();
+    }
+    
+    public String getBotToken() {
+        return botToken;
+    }
+    
+    public String getChatId() {
+        return chatId;
     }
     
     public void sendMessage(String message) {
         if (!isEnabled()) return;
         
+        // Если chat-id не указан, не отправляем в канал
+        if (!hasChatId()) {
+            if (plugin.getConfig().getBoolean("debug.log-telegram", false)) {
+                plugin.getLogger().info("Chat ID не указан - сообщение не отправлено в канал");
+            }
+            return;
+        }
+        
         try {
             String urlString = "https://api.telegram.org/bot" + botToken + "/sendMessage";
-            URL url = new URL(urlString);
+            URL url = URI.create(urlString).toURL();
             HttpURLConnection connection = (HttpURLConnection) url.openConnection();
             connection.setRequestMethod("POST");
             connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
@@ -78,18 +121,42 @@ public class TelegramIntegration {
             
             int responseCode = connection.getResponseCode();
             if (responseCode != 200) {
-                plugin.getLogger().warning("Ошибка отправки сообщения в Telegram: " + responseCode);
                 // Читаем ответ для отладки
+                String errorMessage = "";
                 try (BufferedReader br = new BufferedReader(new InputStreamReader(connection.getErrorStream()))) {
                     String line;
                     StringBuilder response = new StringBuilder();
                     while ((line = br.readLine()) != null) {
                         response.append(line);
                     }
-                    plugin.getLogger().warning("Ответ Telegram: " + response.toString());
+                    errorMessage = response.toString();
+                } catch (Exception e) {
+                    // Игнорируем ошибки чтения
+                }
+                
+                // Парсим ошибку
+                if (errorMessage.contains("chat not found")) {
+                    plugin.getLogger().warning("═══════════════════════════════════════");
+                    plugin.getLogger().warning("❌ ОШИБКА: Chat ID не найден!");
+                    plugin.getLogger().warning("Проверьте:");
+                    plugin.getLogger().warning("1. Правильность Chat ID в config.yml");
+                    plugin.getLogger().warning("2. Бот добавлен в группу/канал");
+                    plugin.getLogger().warning("3. Бот имеет права на отправку сообщений");
+                    plugin.getLogger().warning("Текущий Chat ID: " + chatId);
+                    plugin.getLogger().warning("═══════════════════════════════════════");
+                } else if (errorMessage.contains("Unauthorized")) {
+                    plugin.getLogger().warning("❌ ОШИБКА: Неверный Bot Token!");
+                    plugin.getLogger().warning("Проверьте токен бота в config.yml");
+                } else {
+                    plugin.getLogger().warning("Ошибка отправки сообщения в Telegram: " + responseCode);
+                    if (!errorMessage.isEmpty()) {
+                        plugin.getLogger().warning("Ответ Telegram: " + errorMessage);
+                    }
                 }
             } else {
-                plugin.getLogger().info("Сообщение успешно отправлено в Telegram канал");
+                if (plugin.getConfig().getBoolean("debug.log-telegram", false)) {
+                    plugin.getLogger().info("Сообщение успешно отправлено в Telegram канал");
+                }
             }
             
             connection.disconnect();
@@ -104,7 +171,7 @@ public class TelegramIntegration {
         
         try {
             String urlString = "https://api.telegram.org/bot" + botToken + "/sendMessage";
-            URL url = new URL(urlString);
+            URL url = URI.create(urlString).toURL();
             HttpURLConnection connection = (HttpURLConnection) url.openConnection();
             connection.setRequestMethod("POST");
             connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
@@ -154,8 +221,10 @@ public class TelegramIntegration {
                 newStatus);
         
         // Отправляем в общий канал
-        if (sendToChannel && !chatId.isEmpty()) {
-            plugin.getLogger().info("Отправка в общий канал: " + sendToChannel);
+        if (sendToChannel && hasChatId()) {
+            if (plugin.getConfig().getBoolean("debug.log-telegram", false)) {
+                plugin.getLogger().info("Отправка в общий канал: " + sendToChannel);
+            }
             sendMessage(message);
         }
         
@@ -179,7 +248,7 @@ public class TelegramIntegration {
                 getPlayerRank(player));
         
         // Отправляем в общий канал
-        if (sendToChannel && !chatId.isEmpty()) {
+        if (sendToChannel && hasChatId()) {
             sendMessage(message);
         }
         
@@ -202,7 +271,7 @@ public class TelegramIntegration {
                 getPlayerRank(player));
         
         // Отправляем в общий канал
-        if (sendToChannel && !chatId.isEmpty()) {
+        if (sendToChannel && hasChatId()) {
             sendMessage(message);
         }
         
@@ -264,6 +333,54 @@ public class TelegramIntegration {
         } else {
             return String.format("%dс", seconds);
         }
+    }
+    
+    /**
+     * Обработать команду Telegram
+     * @param telegramId ID пользователя Telegram
+     * @param command Команда (например, "bs_ban_stats")
+     * @param args Аргументы команды
+     * @return Результат выполнения команды
+     */
+    public String handleCommand(String telegramId, String command, String[] args) {
+        if (!isEnabled()) {
+            return "❌ Telegram интеграция не включена";
+        }
+        
+        Map<String, Object> commands = plugin.getTelegramCommands();
+        if (commands == null || commands.isEmpty()) {
+            return "❌ Команды не инициализированы";
+        }
+        
+        Object commandHandler = commands.get(command);
+        if (commandHandler == null) {
+            return "❌ Неизвестная команда: " + command;
+        }
+        
+        try {
+            if (commandHandler instanceof ru.beastmark.telegram.commands.StatsCommand) {
+                return ((ru.beastmark.telegram.commands.StatsCommand) commandHandler).handle(args);
+            } else if (commandHandler instanceof ru.beastmark.telegram.commands.RecentBansCommand) {
+                return ((ru.beastmark.telegram.commands.RecentBansCommand) commandHandler).handle(args);
+            } else if (commandHandler instanceof ru.beastmark.telegram.commands.StatusCommand) {
+                return ((ru.beastmark.telegram.commands.StatusCommand) commandHandler).handle(telegramId);
+            } else if (commandHandler instanceof ru.beastmark.telegram.commands.SetStatusCommand) {
+                return ((ru.beastmark.telegram.commands.SetStatusCommand) commandHandler).handle(telegramId, args);
+            }
+        } catch (Exception e) {
+            plugin.getLogger().severe("Ошибка выполнения команды " + command + ": " + e.getMessage());
+            e.printStackTrace();
+            return "❌ Ошибка выполнения команды: " + e.getMessage();
+        }
+        
+        return "❌ Команда не поддерживается";
+    }
+    
+    /**
+     * Отправить результат выполнения команды пользователю
+     */
+    public void sendCommandResult(String telegramId, String result) {
+        sendPersonalMessage(telegramId, result);
     }
     
     public void reload() {

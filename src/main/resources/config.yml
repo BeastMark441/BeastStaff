@@ -109,6 +109,14 @@ logging:
   # Логировать запросы к базе данных
   log-database-queries: false
 
+# Настройки отладки
+debug:
+  enabled: false
+  log-level: "INFO"
+  log-sql: false
+  log-telegram: false
+  log-cache: false
+
 # Настройки интеграций
 integrations:
   # PlaceholderAPI интеграция
@@ -129,7 +137,8 @@ integrations:
     enabled: false
     bot-token: "YOUR_BOT_TOKEN"
     # ID канала или группы (например: -1001234567890)
-    chat-id: "YOUR_CHAT_ID"
+    # ОПЦИОНАЛЬНО: если не указан, бот будет работать только для личных сообщений
+    # chat-id: ""
     # Уведомления о смене статусов
     notify-status-changes: true
     # Уведомления о входе/выходе персонала
@@ -140,3 +149,49 @@ integrations:
     personal-notifications: true
     # Отправлять уведомления в общий канал
     send-to-channel: true
+    # Команды Telegram
+    commands:
+      enabled: true
+      # /bs_ban_stats - статистика наказаний
+      # /bs_recent_bans - последние наказания
+      # /bs_status - мой статус
+      # /bs_set_status - изменить статус
+    # Уведомления о новых наказаниях
+    notifications:
+      new-punishment: true
+      punishment-check-interval: 30  # секунды
+      # Уведомления о долгом AFK
+      afk-warning: true
+      afk-warning-time: 300  # секунды (5 минут)
+      # Ежедневный отчёт
+      daily-report: true
+      daily-report-time: "23:59"
+  
+  # LiteBans интеграция
+  litebans:
+    enabled: false
+    # Использовать ту же БД, что и BeastStaff
+    # Если true - будет использоваться БД из секции database выше
+    # Если false - нужно настроить database ниже
+    use-same-database: true
+    
+    # Настройки отдельной БД для LiteBans (используется только если use-same-database: false)
+    database:
+      # Тип БД: mysql или sqlite
+      type: "mysql"
+      
+      # Для MySQL:
+      host: "localhost"
+      port: 3306
+      database: "litebans"
+      username: ""
+      password: ""
+      
+      # Для SQLite (если type: sqlite):
+      # Путь к файлу БД. Если не указан, плагин попытается найти автоматически
+      # path: "plugins/LiteBans/litebans.db"
+    
+    # Кеширование статистики
+    cache:
+      enabled: true
+      ttl-minutes: 5  # Обновлять каждые 5 минут

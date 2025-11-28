@@ -21,10 +21,21 @@ public class TimeTrackingListener implements Listener {
         Player player = event.getPlayer();
         
         if (plugin.getStaffManager().isStaffMember(player.getUniqueId())) {
-            // Если у игрока был активный статус, восстанавливаем его
-            String lastStatus = plugin.getTimeTrackingManager().getPlayerStatus(player.getUniqueId());
-            if (lastStatus != null && !lastStatus.equals("Не в работе")) {
-                plugin.getTimeTrackingManager().startSession(player, lastStatus);
+            // Проверяем настройки автовосстановления статуса
+            if (plugin.getConfig().getBoolean("time-tracking.auto-management.restore-status-on-join", true)) {
+                String lastStatus = plugin.getTimeTrackingManager().getPlayerStatus(player.getUniqueId());
+                if (lastStatus != null && !lastStatus.equals("Не в работе")) {
+                    // Восстанавливаем статус только если его нет в активных сессиях
+                    if (plugin.getTimeTrackingManager().getActiveSession(player.getUniqueId()) == null) {
+                        plugin.getTimeTrackingManager().startSession(player, lastStatus);
+                    }
+                } else {
+                    // Устанавливаем статус по умолчанию
+                    String defaultStatus = plugin.getConfig().getString("staff.default-status", "В работе");
+                    if (plugin.getConfig().getBoolean("staff.auto-status-on-join", true)) {
+                        plugin.getTimeTrackingManager().startSession(player, defaultStatus);
+                    }
+                }
             }
         }
     }

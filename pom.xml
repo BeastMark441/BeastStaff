@@ -6,15 +6,15 @@
 
     <groupId>ru.beastmark</groupId>
     <artifactId>BeastStaff</artifactId>
-    <version>1.0.0</version>
+    <version>2.0.0</version>
     <packaging>jar</packaging>
 
     <name>BeastStaff</name>
     <description>Minecraft plugin for staff management</description>
 
     <properties>
-        <maven.compiler.source>17</maven.compiler.source>
-        <maven.compiler.target>17</maven.compiler.target>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
@@ -33,8 +33,32 @@
         <dependency>
             <groupId>io.papermc.paper</groupId>
             <artifactId>paper-api</artifactId>
-            <version>1.21.8-R0.1-SNAPSHOT</version>
+            <version>1.21.11-pre3-R0.1-SNAPSHOT</version>
             <scope>provided</scope>
+        </dependency>
+        <!-- Telegram Bot API -->
+        <dependency>
+            <groupId>org.telegram</groupId>
+            <artifactId>telegrambots</artifactId>
+            <version>6.9.7.1</version>
+        </dependency>
+        <!-- HikariCP для connection pooling -->
+        <dependency>
+            <groupId>com.zaxxer</groupId>
+            <artifactId>HikariCP</artifactId>
+            <version>5.1.0</version>
+        </dependency>
+        <!-- MySQL Connector -->
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+            <version>8.2.0</version>
+        </dependency>
+        <!-- SQLite -->
+        <dependency>
+            <groupId>org.xerial</groupId>
+            <artifactId>sqlite-jdbc</artifactId>
+            <version>3.44.1.0</version>
         </dependency>
     </dependencies>
 
@@ -45,8 +69,8 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.11.0</version>
                 <configuration>
-                    <source>17</source>
-                    <target>17</target>
+                    <source>21</source>
+                    <target>21</target>
                 </configuration>
             </plugin>
             <plugin>
@@ -61,6 +85,37 @@
                         </goals>
                         <configuration>
                             <createDependencyReducedPom>false</createDependencyReducedPom>
+                            <!-- Исключаем ненужные файлы для уменьшения размера -->
+                            <filters>
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <excludes>
+                                        <!-- Исключаем файлы лицензий и документации -->
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>META-INF/*.DSA</exclude>
+                                        <exclude>META-INF/*.RSA</exclude>
+                                        <exclude>META-INF/LICENSE*</exclude>
+                                        <exclude>META-INF/license*</exclude>
+                                        <exclude>META-INF/NOTICE*</exclude>
+                                        <exclude>META-INF/notice*</exclude>
+                                        <exclude>META-INF/DEPENDENCIES</exclude>
+                                        <exclude>META-INF/dependencies</exclude>
+                                        <exclude>META-INF/maven/**</exclude>
+                                        <exclude>about.html</exclude>
+                                        <exclude>LICENSE</exclude>
+                                        <exclude>LICENSE.txt</exclude>
+                                        <exclude>NOTICE</exclude>
+                                        <exclude>NOTICE.txt</exclude>
+                                        <!-- Исключаем модули, которые не используются -->
+                                        <exclude>module-info.class</exclude>
+                                        <!-- Исключаем ненужные файлы из Telegram библиотеки -->
+                                        <exclude>org/telegram/telegrambots/meta/exceptions/**</exclude>
+                                        <exclude>org/telegram/telegrambots/meta/api/methods/sendapi/**</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
+                            <!-- Минификация (опционально, может вызвать проблемы) -->
+                            <minimizeJar>false</minimizeJar>
                         </configuration>
                     </execution>
                 </executions>

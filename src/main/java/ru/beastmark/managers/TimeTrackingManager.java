@@ -58,26 +58,48 @@ public class TimeTrackingManager {
             return;
         }
         
-        // Завершаем предыдущую сессию, если есть
-        endSession(player.getUniqueId());
+        UUID playerUUID = player.getUniqueId();
+        String currentStatus = playerStatuses.get(playerUUID);
         
+        // Если статус не изменился, не создаём новую сессию
+        if (status.equals(currentStatus)) {
+            // Обновляем только время последней активности для активной сессии
+            WorkSession activeSession = activeSessions.get(playerUUID);
+            if (activeSession != null && activeSession.getStatus().equals(status)) {
+                // Сессия уже активна с этим статусом, ничего не делаем
+                return;
+            }
+        }
+        
+        // Завершаем предыдущую сессию, если есть и статус изменился
+        if (currentStatus != null && !currentStatus.equals(status)) {
+            endSession(playerUUID, status);
+        } else if (currentStatus == null) {
+            // Первая сессия для игрока
+            endSession(playerUUID);
+        }
+        
+        // Создаём новую сессию только если статус изменился или это первая сессия
         WorkSession session = new WorkSession(
-                player.getUniqueId(),
+                playerUUID,
                 player.getName(),
                 status,
                 System.currentTimeMillis()
         );
         
-        activeSessions.put(player.getUniqueId(), session);
-        playerStatuses.put(player.getUniqueId(), status);
+        activeSessions.put(playerUUID, session);
+        playerStatuses.put(playerUUID, status);
         
         saveSessionToDatabase(session);
         
-        player.sendMessage("§a[BeastStaff] Статус изменен на: " + status);
-        
-        // Отправляем уведомление в Telegram
-        if (plugin.getTelegramIntegration() != null) {
-            plugin.getTelegramIntegration().notifyStatusChange(player, null, status);
+        // Отправляем сообщение только если статус действительно изменился
+        if (currentStatus == null || !currentStatus.equals(status)) {
+            player.sendMessage("§a[BeastStaff] Статус изменен на: " + status);
+            
+            // Отправляем уведомление в Telegram
+            if (plugin.getTelegramIntegration() != null) {
+                plugin.getTelegramIntegration().notifyStatusChange(player, currentStatus, status);
+            }
         }
     }
     
@@ -226,7 +248,9 @@ public class TimeTrackingManager {
     
     private void saveSessionToDatabase(WorkSession session) {
         if (plugin.getDatabaseManager().isConnected()) {
-            plugin.getLogger().info("Сохранение сессии в базу данных: " + plugin.getDatabaseManager().getDatabaseType());
+            if (plugin.getConfig().getBoolean("debug.log-sql", false)) {
+                plugin.getLogger().info("Сохранение сессии в базу данных: " + plugin.getDatabaseManager().getDatabaseType());
+            }
             String query = "INSERT INTO time_tracking (player_uuid, player_name, status, start_time) VALUES (?, ?, ?, ?)";
             
             try (PreparedStatement stmt = plugin.getDatabaseManager().getConnection().prepareStatement(query)) {
@@ -239,19 +263,25 @@ public class TimeTrackingManager {
                 plugin.getLogger().log(Level.SEVERE, "Ошибка сохранения сессии в БД", e);
             }
         } else {
-            plugin.getLogger().info("Сохранение сессии в файл (YAML) - база данных не подключена");
-            // Сохраняем в файл
-            String path = "sessions." + session.getPlayerUUID().toString() + "." + System.currentTimeMillis();
-            timeTrackingConfig.set(path + ".player_name", session.getPlayerName());
-            timeTrackingConfig.set(path + ".status", session.getStatus());
-            timeTrackingConfig.set(path + ".start_time", session.getStartTime());
-            timeTrackingConfig.set(path + ".end_time", 0L);
-            timeTrackingConfig.set(path + ".duration", 0L);
+            if (plugin.getConfig().getBoolean("debug.log-sql", false)) {
+                plugin.getLogger().info("Сохранение сессии в файл (YAML) - база данных не подключена");
+            }
+            // Сохраняем в файл - используем start_time как уникальный ключ для избежания дубликатов
+            String path = "sessions." + session.getPlayerUUID().toString() + "." + session.getStartTime();
             
-            try {
-                timeTrackingConfig.save(timeTrackingFile);
-            } catch (IOException e) {
-                plugin.getLogger().log(Level.SEVERE, "Ошибка сохранения сессии в файл", e);
+            // Проверяем, не существует ли уже сессия с таким start_time
+            if (!timeTrackingConfig.contains(path)) {
+                timeTrackingConfig.set(path + ".player_name", session.getPlayerName());
+                timeTrackingConfig.set(path + ".status", session.getStatus());
+                timeTrackingConfig.set(path + ".start_time", session.getStartTime());
+                timeTrackingConfig.set(path + ".end_time", 0L);
+                timeTrackingConfig.set(path + ".duration", 0L);
+                
+                try {
+                    timeTrackingConfig.save(timeTrackingFile);
+                } catch (IOException e) {
+                    plugin.getLogger().log(Level.SEVERE, "Ошибка сохранения сессии в файл", e);
+                }
             }
         }
     }
