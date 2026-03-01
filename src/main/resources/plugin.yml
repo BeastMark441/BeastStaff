@@ -1,16 +1,19 @@
 name: BeastStaff
 version: '${project.version}'
 main: ru.beastmark.BeastStaff
-api-version: '1.21'
+api-version: '1.16'
 author: BeastMark
 description: Minecraft plugin for staff management and time tracking
 website: https://github.com/BeastMark441/BeastStaff
+softdepend:
+  - PlaceholderAPI
+  - LiteBans
 
 commands:
   beaststaff:
     description: Основная команда плагина BeastStaff
     usage: /beaststaff <add|remove|list|info|reload|menu|status|stats|allstats|setstatus> [игрок] [ранг/статус]
-    permission: beaststaff.admin
+    permission: beaststaff.staff
     permission-message: §c[BeastStaff] У вас нет прав для использования этой команды!
   
   bs:
@@ -23,15 +26,68 @@ permissions:
   beaststaff.admin:
     description: Полный доступ к командам BeastStaff
     default: op
+    children:
+      beaststaff.staff: true
+      beaststaff.command.add: true
+      beaststaff.command.remove: true
+      beaststaff.command.reload: true
+      beaststaff.command.setstatus: true
+      beaststaff.command.allstats: true
+      beaststaff.command.stats.other: true
+      beaststaff.command.testtelegram: true
+      beaststaff.notify: true
+
   beaststaff.staff:
-    description: Доступ к командам персонала (меню статусов, статистика)
+    description: Доступ к командам персонала
     default: op
+    children:
+      beaststaff.command.list: true
+      beaststaff.command.info: true
+      beaststaff.command.menu: true
+      beaststaff.command.status: true
+      beaststaff.command.stats: true
+      beaststaff.command.telegram: true
+
   beaststaff.notify:
     description: Получать уведомления о входе/выходе персонала
     default: op
-  beaststaff.time.admin:
-    description: Административные права для учёта времени
+
+  beaststaff.command.add:
+    description: Добавить сотрудника
     default: op
-  beaststaff.time.stats:
-    description: Просмотр статистики времени работы
+  beaststaff.command.remove:
+    description: Удалить сотрудника
+    default: op
+  beaststaff.command.reload:
+    description: Перезагрузить конфигурацию
+    default: op
+  beaststaff.command.list:
+    description: Список сотрудников
+    default: op
+  beaststaff.command.info:
+    description: Информация о сотруднике
+    default: op
+  beaststaff.command.menu:
+    description: Меню статусов
+    default: op
+  beaststaff.command.status:
+    description: Изменить статус
+    default: op
+  beaststaff.command.stats:
+    description: Просмотр своей статистики
+    default: op
+  beaststaff.command.stats.other:
+    description: Просмотр чужой статистики
+    default: op
+  beaststaff.command.allstats:
+    description: Общая статистика
+    default: op
+  beaststaff.command.setstatus:
+    description: Установить статус другому игроку
+    default: op
+  beaststaff.command.telegram:
+    description: Управление Telegram
+    default: op
+  beaststaff.command.testtelegram:
+    description: Тест Telegram
     default: op

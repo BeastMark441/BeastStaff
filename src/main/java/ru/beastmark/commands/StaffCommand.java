@@ -12,6 +12,8 @@ import ru.beastmark.managers.StaffManager;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 public class StaffCommand implements CommandExecutor, TabCompleter {
@@ -24,21 +26,6 @@ public class StaffCommand implements CommandExecutor, TabCompleter {
     
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        // Проверяем права доступа (admin для beaststaff, staff для bs)
-        boolean isAdmin = sender.hasPermission("beaststaff.admin");
-        boolean isStaff = sender.hasPermission("beaststaff.staff");
-        
-        // Для команды /bs достаточно прав staff, для /beaststaff нужны права admin
-        if (label.equalsIgnoreCase("bs") && !isStaff && !isAdmin) {
-            sender.sendMessage("§c[BeastStaff] У вас нет прав для использования этой команды!");
-            return true;
-        }
-        
-        if (label.equalsIgnoreCase("beaststaff") && !isAdmin) {
-            sender.sendMessage("§c[BeastStaff] У вас нет прав для использования этой команды!");
-            return true;
-        }
-        
         if (args.length == 0) {
             sendHelpMessage(sender);
             return true;
@@ -46,8 +33,12 @@ public class StaffCommand implements CommandExecutor, TabCompleter {
         
         switch (args[0].toLowerCase()) {
             case "add":
+                if (!sender.hasPermission("beaststaff.command.add")) {
+                    sender.sendMessage(plugin.getMessageManager().getMessage("no-permission"));
+                    return true;
+                }
                 if (args.length < 3) {
-                    sender.sendMessage("§c[BeastStaff] Использование: /beaststaff add <игрок> <ранг>");
+                    sender.sendMessage(plugin.getMessageManager().getMessage("usage-add"));
                     return true;
                 }
                 // Объединяем все аргументы после имени игрока в один ранг
@@ -56,26 +47,42 @@ public class StaffCommand implements CommandExecutor, TabCompleter {
                 break;
                 
             case "remove":
+                if (!sender.hasPermission("beaststaff.command.remove")) {
+                    sender.sendMessage(plugin.getMessageManager().getMessage("no-permission"));
+                    return true;
+                }
                 if (args.length < 2) {
-                    sender.sendMessage("§c[BeastStaff] Использование: /beaststaff remove <игрок>");
+                    sender.sendMessage(plugin.getMessageManager().getMessage("usage-remove"));
                     return true;
                 }
                 handleRemoveCommand(sender, args[1]);
                 break;
                 
             case "list":
+                if (!sender.hasPermission("beaststaff.command.list")) {
+                    sender.sendMessage(plugin.getMessageManager().getMessage("no-permission"));
+                    return true;
+                }
                 handleListCommand(sender);
                 break;
                 
             case "info":
+                if (!sender.hasPermission("beaststaff.command.info")) {
+                    sender.sendMessage(plugin.getMessageManager().getMessage("no-permission"));
+                    return true;
+                }
                 if (args.length < 2) {
-                    sender.sendMessage("§c[BeastStaff] Использование: /beaststaff info <игрок>");
+                    sender.sendMessage(plugin.getMessageManager().getMessage("usage-info"));
                     return true;
                 }
                 handleInfoCommand(sender, args[1]);
                 break;
                 
             case "reload":
+                if (!sender.hasPermission("beaststaff.command.reload")) {
+                    sender.sendMessage(plugin.getMessageManager().getMessage("no-permission"));
+                    return true;
+                }
                 handleReloadCommand(sender);
                 break;
                 
@@ -97,7 +104,7 @@ public class StaffCommand implements CommandExecutor, TabCompleter {
                     .orElse(null);
             
             if (target == null) {
-                sender.sendMessage("§c[BeastStaff] Игрок " + playerName + " не найден!");
+                sender.sendMessage(plugin.getMessageManager().getMessage("player-not-found", "player", playerName));
                 return;
             }
         }
@@ -105,20 +112,20 @@ public class StaffCommand implements CommandExecutor, TabCompleter {
         // Проверяем, что ранг существует в конфигурации
         List<String> availableRanks = plugin.getConfig().getStringList("ranks.available");
         if (!availableRanks.contains(rank)) {
-            sender.sendMessage("§c[BeastStaff] Неизвестный ранг: " + rank);
-            sender.sendMessage("§7Доступные ранги: " + String.join(", ", availableRanks));
+            sender.sendMessage(plugin.getMessageManager().getMessage("unknown-rank", "rank", rank));
+            sender.sendMessage(plugin.getMessageManager().getMessage("available-ranks", "ranks", String.join(", ", availableRanks)));
             return;
         }
         
         StaffManager staffManager = plugin.getStaffManager();
         if (staffManager.isStaffMember(target.getUniqueId())) {
-            sender.sendMessage("§c[BeastStaff] Игрок " + playerName + " уже является персоналом!");
+            sender.sendMessage(plugin.getMessageManager().getMessage("already-staff", "player", playerName));
             return;
         }
         
         staffManager.addStaffMember(target, rank);
-        sender.sendMessage("§a[BeastStaff] Игрок " + playerName + " добавлен в персонал с рангом " + rank + "!");
-        target.sendMessage("§a[BeastStaff] Вы были добавлены в персонал с рангом " + rank + "!");
+        sender.sendMessage(plugin.getMessageManager().getMessage("staff-added", "player", playerName, "rank", rank));
+        target.sendMessage(plugin.getMessageManager().getMessage("staff-added-target", "rank", rank));
     }
     
     private void handleRemoveCommand(CommandSender sender, String playerName) {
@@ -131,34 +138,34 @@ public class StaffCommand implements CommandExecutor, TabCompleter {
                     .orElse(null);
             
             if (target == null) {
-                sender.sendMessage("§c[BeastStaff] Игрок " + playerName + " не найден!");
+                sender.sendMessage(plugin.getMessageManager().getMessage("player-not-found", "player", playerName));
                 return;
             }
         }
         
         StaffManager staffManager = plugin.getStaffManager();
         if (!staffManager.isStaffMember(target.getUniqueId())) {
-            sender.sendMessage("§c[BeastStaff] Игрок " + playerName + " не является персоналом!");
+            sender.sendMessage(plugin.getMessageManager().getMessage("not-staff", "player", playerName));
             return;
         }
         
         staffManager.removeStaffMember(target.getUniqueId());
-        sender.sendMessage("§a[BeastStaff] Игрок " + playerName + " удален из персонала!");
-        target.sendMessage("§c[BeastStaff] Вы были удалены из персонала!");
+        sender.sendMessage(plugin.getMessageManager().getMessage("staff-removed", "player", playerName));
+        target.sendMessage(plugin.getMessageManager().getMessage("staff-removed-target"));
     }
     
     private void handleListCommand(CommandSender sender) {
         StaffManager staffManager = plugin.getStaffManager();
-        var staffMembers = staffManager.getAllStaffMembers();
+        Map<UUID, StaffManager.StaffMember> staffMembers = staffManager.getAllStaffMembers();
         
         if (staffMembers.isEmpty()) {
-            sender.sendMessage("§e[BeastStaff] Список персонала пуст!");
+            sender.sendMessage(plugin.getMessageManager().getMessage("staff-list-empty"));
             return;
         }
         
-        sender.sendMessage("§6[BeastStaff] Список персонала:");
+        sender.sendMessage(plugin.getMessageManager().getMessage("staff-list-header"));
         for (StaffManager.StaffMember member : staffMembers.values()) {
-            sender.sendMessage("§7- " + member.getName() + " §8(" + member.getRank() + ")");
+            sender.sendMessage(plugin.getMessageManager().getMessage("staff-list-item", "player", member.getName(), "rank", member.getRank()));
         }
     }
     
@@ -172,22 +179,22 @@ public class StaffCommand implements CommandExecutor, TabCompleter {
                     .orElse(null);
             
             if (target == null) {
-                sender.sendMessage("§c[BeastStaff] Игрок " + playerName + " не найден!");
+                sender.sendMessage(plugin.getMessageManager().getMessage("player-not-found", "player", playerName));
                 return;
             }
         }
         
         StaffManager staffManager = plugin.getStaffManager();
         if (!staffManager.isStaffMember(target.getUniqueId())) {
-            sender.sendMessage("§c[BeastStaff] Игрок " + playerName + " не является персоналом!");
+            sender.sendMessage(plugin.getMessageManager().getMessage("not-staff", "player", playerName));
             return;
         }
         
         StaffManager.StaffMember member = staffManager.getStaffMember(target.getUniqueId());
-        sender.sendMessage("§6[BeastStaff] Информация о " + member.getName() + ":");
-        sender.sendMessage("§7Ранг: §f" + member.getRank());
-        sender.sendMessage("§7Дата добавления: §f" + new java.text.SimpleDateFormat("dd.MM.yyyy HH:mm:ss")
-                .format(new java.util.Date(member.getJoinDate())));
+        sender.sendMessage(plugin.getMessageManager().getMessage("staff-info-header", "player", member.getName()));
+        sender.sendMessage(plugin.getMessageManager().getMessage("staff-info-rank", "rank", member.getRank()));
+        sender.sendMessage(plugin.getMessageManager().getMessage("staff-info-date", "date", new java.text.SimpleDateFormat("dd.MM.yyyy HH:mm:ss")
+                .format(new java.util.Date(member.getJoinDate()))));
     }
     
     private void handleReloadCommand(CommandSender sender) {
@@ -197,24 +204,25 @@ public class StaffCommand implements CommandExecutor, TabCompleter {
         plugin.getTelegramIntegration().reload();
         plugin.getTelegramBindingManager().reloadBindings();
         plugin.getDatabaseManager().reload();
-        sender.sendMessage("§a[BeastStaff] Конфигурация перезагружена!");
+        plugin.getMessageManager().loadMessages();
+        sender.sendMessage(plugin.getMessageManager().getMessage("config-reloaded"));
     }
     
     private void sendHelpMessage(CommandSender sender) {
-        sender.sendMessage("§6[BeastStaff] Доступные команды:");
-        sender.sendMessage("§7/beaststaff add <игрок> <ранг> §8- Добавить игрока в персонал");
-        sender.sendMessage("§7/beaststaff remove <игрок> §8- Удалить игрока из персонала");
-        sender.sendMessage("§7/beaststaff list §8- Показать список персонала");
-        sender.sendMessage("§7/beaststaff info <игрок> §8- Информация об игроке");
-        sender.sendMessage("§7/beaststaff reload §8- Перезагрузить конфигурацию");
-        sender.sendMessage("§7/beaststaff menu §8- Открыть меню статусов");
-        sender.sendMessage("§7/beaststaff status <статус> §8- Изменить статус");
-        sender.sendMessage("§7/beaststaff stats [игрок] [дни] §8- Просмотр статистики");
-        sender.sendMessage("§7/beaststaff allstats [дни] §8- Общая статистика персонала");
-        sender.sendMessage("§7/beaststaff telegram §8- Управление Telegram привязками");
+        sender.sendMessage(plugin.getMessageManager().getMessage("staff-help-header"));
+        sender.sendMessage(plugin.getMessageManager().getMessage("staff-help-add"));
+        sender.sendMessage(plugin.getMessageManager().getMessage("staff-help-remove"));
+        sender.sendMessage(plugin.getMessageManager().getMessage("staff-help-list"));
+        sender.sendMessage(plugin.getMessageManager().getMessage("staff-help-info"));
+        sender.sendMessage(plugin.getMessageManager().getMessage("staff-help-reload"));
+        sender.sendMessage(plugin.getMessageManager().getMessage("staff-help-menu"));
+        sender.sendMessage(plugin.getMessageManager().getMessage("staff-help-status"));
+        sender.sendMessage(plugin.getMessageManager().getMessage("staff-help-stats"));
+        sender.sendMessage(plugin.getMessageManager().getMessage("staff-help-allstats"));
+        sender.sendMessage(plugin.getMessageManager().getMessage("staff-help-telegram"));
         if (sender.hasPermission("beaststaff.admin")) {
-            sender.sendMessage("§7/beaststaff setstatus <игрок> <статус> §8- Установить статус игрока");
-            sender.sendMessage("§7/beaststaff testtelegram §8- Тестирование Telegram интеграции");
+            sender.sendMessage(plugin.getMessageManager().getMessage("staff-help-setstatus"));
+            sender.sendMessage(plugin.getMessageManager().getMessage("staff-help-testtelegram"));
         }
     }
     

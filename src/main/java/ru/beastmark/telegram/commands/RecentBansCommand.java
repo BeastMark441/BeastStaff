@@ -22,7 +22,7 @@ public class RecentBansCommand {
     
     public String handle(String[] args) {
         if (liteBansManager == null || !liteBansManager.isEnabled()) {
-            return "❌ Интеграция с LiteBans не включена или недоступна";
+            return plugin.getMessageManager().getMessage("telegram-litebans-disabled");
         }
         
         int limit = 10;
@@ -39,10 +39,10 @@ public class RecentBansCommand {
         List<Map<String, Object>> punishments = liteBansManager.getRecentPunishments(limit);
         
         if (punishments.isEmpty()) {
-            return "📭 Нет последних наказаний";
+            return plugin.getMessageManager().getMessage("telegram-recent-bans-empty");
         }
         
-        return StatisticsFormatter.formatRecentBans(punishments);
+        return StatisticsFormatter.formatRecentBans(plugin, punishments);
     }
 }
 

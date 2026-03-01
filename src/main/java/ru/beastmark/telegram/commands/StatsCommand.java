@@ -23,7 +23,7 @@ public class StatsCommand {
     
     public String handle(String[] args) {
         if (liteBansManager == null || !liteBansManager.isEnabled()) {
-            return "❌ Интеграция с LiteBans не включена или недоступна";
+            return plugin.getMessageManager().getMessage("telegram-litebans-disabled");
         }
         
         // Определить период
@@ -55,7 +55,7 @@ public class StatsCommand {
         PunishmentStats stats = liteBansManager.getStats(from, now);
         
         // Форматировать сообщение
-        return StatisticsFormatter.formatStats(stats, period);
+        return StatisticsFormatter.formatStats(plugin, stats, period);
     }
 }
 

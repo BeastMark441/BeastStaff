@@ -20,22 +20,19 @@ public class SetStatusCommand {
     
     public String handle(String telegramId, String[] args) {
         if (args.length == 0) {
-            return "❌ Использование: /bs_set_status <статус>\n\n" +
-                   "Доступные статусы:\n" +
-                   getAvailableStatuses();
+            return plugin.getMessageManager().getMessage("telegram-setstatus-usage", "statuses", getAvailableStatuses());
         }
         
         // Получить UUID игрока по Telegram ID
         UUID playerUuid = plugin.getTelegramBindingManager().getPlayerByTelegramId(telegramId);
         
         if (playerUuid == null) {
-            return "❌ Ваш Telegram аккаунт не привязан к игровому аккаунту.\n" +
-                   "Используйте команду в игре: /bs telegram bind";
+            return plugin.getMessageManager().getMessage("telegram-status-not-bound");
         }
         
         Player player = Bukkit.getPlayer(playerUuid);
         if (player == null || !player.isOnline()) {
-            return "❌ Вы должны быть онлайн в игре для изменения статуса";
+            return plugin.getMessageManager().getMessage("telegram-setstatus-must-be-online");
         }
         
         String newStatus = String.join(" ", args);
@@ -43,13 +40,13 @@ public class SetStatusCommand {
         // Проверить, что статус валидный
         List<String> availableStatuses = plugin.getConfig().getStringList("time-tracking.statuses");
         if (!availableStatuses.contains(newStatus)) {
-            return "❌ Неверный статус. Доступные статусы:\n" + getAvailableStatuses();
+            return plugin.getMessageManager().getMessage("telegram-setstatus-invalid-status", "statuses", getAvailableStatuses());
         }
         
         // Установить статус
         plugin.getTimeTrackingManager().startSession(player, newStatus);
         
-        return "✅ Статус изменён на: `" + newStatus + "`";
+        return plugin.getMessageManager().getMessage("telegram-setstatus-success", "status", newStatus);
     }
     
     private String getAvailableStatuses() {

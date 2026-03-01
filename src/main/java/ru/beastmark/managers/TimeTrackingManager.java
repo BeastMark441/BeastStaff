@@ -3,7 +3,10 @@ package ru.beastmark.managers;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
+import org.bukkit.scheduler.BukkitTask;
 import ru.beastmark.BeastStaff;
+import ru.beastmark.api.events.StaffWorkEndEvent;
+import ru.beastmark.api.events.StaffWorkStartEvent;
 
 import java.io.File;
 import java.io.IOException;
@@ -11,6 +14,7 @@ import java.sql.*;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.Date;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 
 public class TimeTrackingManager {
@@ -21,11 +25,15 @@ public class TimeTrackingManager {
     private final List<String> availableStatuses;
     private final File timeTrackingFile;
     private FileConfiguration timeTrackingConfig;
+    private final Object timeTrackingFileLock = new Object();
+    private BukkitTask pendingTimeTrackingSaveTask;
+    private final Map<UUID, Map<Integer, Long>> cachedTotalsByDays = new ConcurrentHashMap<>();
+    private BukkitTask placeholderCacheTask;
     
     public TimeTrackingManager(BeastStaff plugin) {
         this.plugin = plugin;
-        this.activeSessions = new HashMap<>();
-        this.playerStatuses = new HashMap<>();
+        this.activeSessions = new ConcurrentHashMap<>();
+        this.playerStatuses = new ConcurrentHashMap<>();
         this.availableStatuses = new ArrayList<>();
         this.timeTrackingFile = new File(plugin.getDataFolder(), "time_tracking.yml");
         
@@ -52,6 +60,39 @@ public class TimeTrackingManager {
         
         timeTrackingConfig = YamlConfiguration.loadConfiguration(timeTrackingFile);
     }
+
+    private void scheduleTimeTrackingFileSave() {
+        long delayTicks = plugin.getConfig().getLong("time-tracking.file-save-delay-ticks", 40L);
+        synchronized (timeTrackingFileLock) {
+            if (pendingTimeTrackingSaveTask != null) {
+                return;
+            }
+            pendingTimeTrackingSaveTask = plugin.getServer().getScheduler().runTaskLaterAsynchronously(plugin, () -> {
+                synchronized (timeTrackingFileLock) {
+                    pendingTimeTrackingSaveTask = null;
+                    try {
+                        timeTrackingConfig.save(timeTrackingFile);
+                    } catch (IOException e) {
+                        plugin.getLogger().log(Level.SEVERE, "Ошибка сохранения сессии в файл", e);
+                    }
+                }
+            }, delayTicks);
+        }
+    }
+
+    public void flushTimeTrackingFileSaveSync() {
+        synchronized (timeTrackingFileLock) {
+            if (pendingTimeTrackingSaveTask != null) {
+                pendingTimeTrackingSaveTask.cancel();
+                pendingTimeTrackingSaveTask = null;
+            }
+            try {
+                timeTrackingConfig.save(timeTrackingFile);
+            } catch (IOException e) {
+                plugin.getLogger().log(Level.SEVERE, "Ошибка сохранения сессии в файл", e);
+            }
+        }
+    }
     
     public void startSession(Player player, String status) {
         if (!plugin.getStaffManager().isStaffMember(player.getUniqueId())) {
@@ -60,6 +101,8 @@ public class TimeTrackingManager {
         
         UUID playerUUID = player.getUniqueId();
         String currentStatus = playerStatuses.get(playerUUID);
+        boolean wasWorking = currentStatus != null && !currentStatus.equals("Не в работе");
+        boolean willBeWorking = status != null && !status.equals("Не в работе");
         
         // Если статус не изменился, не создаём новую сессию
         if (status.equals(currentStatus)) {
@@ -91,10 +134,15 @@ public class TimeTrackingManager {
         playerStatuses.put(playerUUID, status);
         
         saveSessionToDatabase(session);
+        refreshPlayerPlaceholderCache(playerUUID);
+
+        if (willBeWorking && !wasWorking) {
+            plugin.getServer().getPluginManager().callEvent(new StaffWorkStartEvent(playerUUID, player.getName(), currentStatus, status, session.getStartTime()));
+        }
         
         // Отправляем сообщение только если статус действительно изменился
         if (currentStatus == null || !currentStatus.equals(status)) {
-            player.sendMessage("§a[BeastStaff] Статус изменен на: " + status);
+            player.sendMessage(plugin.getMessageManager().getMessage("status-changed", "status", status));
             
             // Отправляем уведомление в Telegram
             if (plugin.getTelegramIntegration() != null) {
@@ -106,18 +154,25 @@ public class TimeTrackingManager {
     public void endSession(UUID playerUUID) {
         WorkSession session = activeSessions.get(playerUUID);
         if (session != null) {
+            String oldStatus = session.getStatus();
             session.setEndTime(System.currentTimeMillis());
             session.calculateDuration();
             
             updateSessionInDatabase(session);
             activeSessions.remove(playerUUID);
             playerStatuses.remove(playerUUID);
+            refreshPlayerPlaceholderCache(playerUUID);
+
+            if (oldStatus != null && !oldStatus.equals("Не в работе")) {
+                plugin.getServer().getPluginManager().callEvent(new StaffWorkEndEvent(playerUUID, session.getPlayerName(), oldStatus, null, session.getStartTime(), session.getEndTime(), session.getDuration()));
+            }
         }
     }
     
     public void endSession(UUID playerUUID, String newStatus) {
         WorkSession session = activeSessions.get(playerUUID);
         if (session != null) {
+            String oldStatus = session.getStatus();
             session.setEndTime(System.currentTimeMillis());
             session.calculateDuration();
             
@@ -128,6 +183,14 @@ public class TimeTrackingManager {
                 playerStatuses.put(playerUUID, newStatus);
             } else {
                 playerStatuses.remove(playerUUID);
+            }
+            refreshPlayerPlaceholderCache(playerUUID);
+
+            if (oldStatus != null && !oldStatus.equals("Не в работе")) {
+                boolean nowNotWorking = newStatus == null || newStatus.equals("Не в работе");
+                if (nowNotWorking) {
+                    plugin.getServer().getPluginManager().callEvent(new StaffWorkEndEvent(playerUUID, session.getPlayerName(), oldStatus, newStatus, session.getStartTime(), session.getEndTime(), session.getDuration()));
+                }
             }
         }
     }
@@ -152,6 +215,102 @@ public class TimeTrackingManager {
     public WorkSession getActiveSession(UUID playerUUID) {
         return activeSessions.get(playerUUID);
     }
+
+    public void startPlaceholderCache() {
+        long refreshTicks = plugin.getConfig().getLong("placeholders.cache-refresh-ticks", 20L * 60L);
+        if (refreshTicks <= 0) {
+            return;
+        }
+        if (placeholderCacheTask != null) {
+            placeholderCacheTask.cancel();
+        }
+        placeholderCacheTask = plugin.getServer().getScheduler().runTaskTimerAsynchronously(plugin, () -> {
+            for (Player player : plugin.getServer().getOnlinePlayers()) {
+                if (plugin.getStaffManager().isStaffMember(player.getUniqueId())) {
+                    refreshPlayerPlaceholderCache(player.getUniqueId());
+                }
+            }
+        }, 1L, refreshTicks);
+    }
+
+    public void stopPlaceholderCache() {
+        if (placeholderCacheTask != null) {
+            placeholderCacheTask.cancel();
+            placeholderCacheTask = null;
+        }
+        cachedTotalsByDays.clear();
+    }
+
+    private void refreshPlayerPlaceholderCache(UUID playerUUID) {
+        if (!plugin.getServer().isPrimaryThread()) {
+            refreshPlayerPlaceholderCacheAsync(playerUUID);
+            return;
+        }
+        refreshPlayerPlaceholderCacheAsync(playerUUID);
+    }
+
+    private void refreshPlayerPlaceholderCacheAsync(UUID playerUUID) {
+        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+            int[] daysList = new int[] {1, 7, 30, 365};
+            Map<Integer, Long> totals = new HashMap<>();
+            for (int days : daysList) {
+                totals.put(days, calculateTotalWorkTimeMillis(playerUUID, days));
+            }
+            cachedTotalsByDays.put(playerUUID, totals);
+        });
+    }
+
+    public long getCachedTotalWorkTimeMillis(UUID playerUUID, int days) {
+        Map<Integer, Long> totals = cachedTotalsByDays.get(playerUUID);
+        if (totals == null) {
+            return -1L;
+        }
+        Long value = totals.get(days);
+        return value != null ? value : -1L;
+    }
+
+    private long calculateTotalWorkTimeMillis(UUID playerUUID, int days) {
+        long startTime = System.currentTimeMillis() - (days * 24L * 60L * 60L * 1000L);
+        String notWorkingStatus = "Не в работе";
+        if (plugin.getDatabaseManager().isConnected()) {
+            String query = "SELECT COALESCE(SUM(duration), 0) AS total FROM time_tracking WHERE player_uuid = ? AND start_time >= ? AND status <> ?";
+            try (Connection conn = plugin.getDatabaseManager().getConnection();
+                 PreparedStatement stmt = conn.prepareStatement(query)) {
+                stmt.setString(1, playerUUID.toString());
+                stmt.setLong(2, startTime);
+                stmt.setString(3, notWorkingStatus);
+                try (ResultSet rs = stmt.executeQuery()) {
+                    if (rs.next()) {
+                        return rs.getLong("total");
+                    }
+                }
+            } catch (SQLException e) {
+                plugin.getLogger().log(Level.SEVERE, "Ошибка получения статистики времени из БД", e);
+            }
+            return 0L;
+        }
+
+        long total = 0L;
+        String path = "sessions." + playerUUID.toString();
+        synchronized (timeTrackingFileLock) {
+            if (timeTrackingConfig.contains(path)) {
+                for (String sessionId : timeTrackingConfig.getConfigurationSection(path).getKeys(false)) {
+                    String sessionPath = path + "." + sessionId;
+                    long sessionStart = timeTrackingConfig.getLong(sessionPath + ".start_time");
+                    if (sessionStart < startTime) {
+                        continue;
+                    }
+                    String status = timeTrackingConfig.getString(sessionPath + ".status", "");
+                    if (notWorkingStatus.equals(status)) {
+                        continue;
+                    }
+                    long duration = timeTrackingConfig.getLong(sessionPath + ".duration");
+                    total += duration;
+                }
+            }
+        }
+        return total;
+    }
     
     public List<WorkSession> getPlayerSessions(UUID playerUUID, int days) {
         List<WorkSession> sessions = new ArrayList<>();
@@ -163,21 +322,23 @@ public class TimeTrackingManager {
             
             String query = "SELECT * FROM time_tracking WHERE player_uuid = ? AND start_time >= ? ORDER BY start_time DESC";
             
-            try (PreparedStatement stmt = plugin.getDatabaseManager().getConnection().prepareStatement(query)) {
+            try (Connection conn = plugin.getDatabaseManager().getConnection();
+                 PreparedStatement stmt = conn.prepareStatement(query)) {
                 stmt.setString(1, playerUUID.toString());
                 stmt.setLong(2, startTime);
                 
-                ResultSet rs = stmt.executeQuery();
-                while (rs.next()) {
-                    WorkSession session = new WorkSession(
-                            UUID.fromString(rs.getString("player_uuid")),
-                            rs.getString("player_name"),
-                            rs.getString("status"),
-                            rs.getLong("start_time")
-                    );
-                    session.setEndTime(rs.getLong("end_time"));
-                    session.setDuration(rs.getLong("duration"));
-                    sessions.add(session);
+                try (ResultSet rs = stmt.executeQuery()) {
+                    while (rs.next()) {
+                        WorkSession session = new WorkSession(
+                                UUID.fromString(rs.getString("player_uuid")),
+                                rs.getString("player_name"),
+                                rs.getString("status"),
+                                rs.getLong("start_time")
+                        );
+                        session.setEndTime(rs.getLong("end_time"));
+                        session.setDuration(rs.getLong("duration"));
+                        sessions.add(session);
+                    }
                 }
             } catch (SQLException e) {
                 plugin.getLogger().log(Level.SEVERE, "Ошибка получения сессий игрока", e);
@@ -186,18 +347,20 @@ public class TimeTrackingManager {
             plugin.getLogger().info("Получение сессий из файла (YAML) - база данных не подключена");
             // Получаем из файла
             String path = "sessions." + playerUUID.toString();
-            if (timeTrackingConfig.contains(path)) {
-                for (String sessionId : timeTrackingConfig.getConfigurationSection(path).getKeys(false)) {
-                    String sessionPath = path + "." + sessionId;
-                    WorkSession session = new WorkSession(
-                            playerUUID,
-                            timeTrackingConfig.getString(sessionPath + ".player_name"),
-                            timeTrackingConfig.getString(sessionPath + ".status"),
-                            timeTrackingConfig.getLong(sessionPath + ".start_time")
-                    );
-                    session.setEndTime(timeTrackingConfig.getLong(sessionPath + ".end_time"));
-                    session.setDuration(timeTrackingConfig.getLong(sessionPath + ".duration"));
-                    sessions.add(session);
+            synchronized (timeTrackingFileLock) {
+                if (timeTrackingConfig.contains(path)) {
+                    for (String sessionId : timeTrackingConfig.getConfigurationSection(path).getKeys(false)) {
+                        String sessionPath = path + "." + sessionId;
+                        WorkSession session = new WorkSession(
+                                playerUUID,
+                                timeTrackingConfig.getString(sessionPath + ".player_name"),
+                                timeTrackingConfig.getString(sessionPath + ".status"),
+                                timeTrackingConfig.getLong(sessionPath + ".start_time")
+                        );
+                        session.setEndTime(timeTrackingConfig.getLong(sessionPath + ".end_time"));
+                        session.setDuration(timeTrackingConfig.getLong(sessionPath + ".duration"));
+                        sessions.add(session);
+                    }
                 }
             }
         }
@@ -248,20 +411,23 @@ public class TimeTrackingManager {
     
     private void saveSessionToDatabase(WorkSession session) {
         if (plugin.getDatabaseManager().isConnected()) {
-            if (plugin.getConfig().getBoolean("debug.log-sql", false)) {
-                plugin.getLogger().info("Сохранение сессии в базу данных: " + plugin.getDatabaseManager().getDatabaseType());
-            }
-            String query = "INSERT INTO time_tracking (player_uuid, player_name, status, start_time) VALUES (?, ?, ?, ?)";
-            
-            try (PreparedStatement stmt = plugin.getDatabaseManager().getConnection().prepareStatement(query)) {
-                stmt.setString(1, session.getPlayerUUID().toString());
-                stmt.setString(2, session.getPlayerName());
-                stmt.setString(3, session.getStatus());
-                stmt.setLong(4, session.getStartTime());
-                stmt.executeUpdate();
-            } catch (SQLException e) {
-                plugin.getLogger().log(Level.SEVERE, "Ошибка сохранения сессии в БД", e);
-            }
+            plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+                if (plugin.getConfig().getBoolean("debug.log-sql", false)) {
+                    plugin.getLogger().info("Сохранение сессии в базу данных: " + plugin.getDatabaseManager().getDatabaseType());
+                }
+                String query = "INSERT INTO time_tracking (player_uuid, player_name, status, start_time) VALUES (?, ?, ?, ?)";
+                
+                try (Connection conn = plugin.getDatabaseManager().getConnection();
+                     PreparedStatement stmt = conn.prepareStatement(query)) {
+                    stmt.setString(1, session.getPlayerUUID().toString());
+                    stmt.setString(2, session.getPlayerName());
+                    stmt.setString(3, session.getStatus());
+                    stmt.setLong(4, session.getStartTime());
+                    stmt.executeUpdate();
+                } catch (SQLException e) {
+                    plugin.getLogger().log(Level.SEVERE, "Ошибка сохранения сессии в БД", e);
+                }
+            });
         } else {
             if (plugin.getConfig().getBoolean("debug.log-sql", false)) {
                 plugin.getLogger().info("Сохранение сессии в файл (YAML) - база данных не подключена");
@@ -269,55 +435,45 @@ public class TimeTrackingManager {
             // Сохраняем в файл - используем start_time как уникальный ключ для избежания дубликатов
             String path = "sessions." + session.getPlayerUUID().toString() + "." + session.getStartTime();
             
-            // Проверяем, не существует ли уже сессия с таким start_time
-            if (!timeTrackingConfig.contains(path)) {
-                timeTrackingConfig.set(path + ".player_name", session.getPlayerName());
-                timeTrackingConfig.set(path + ".status", session.getStatus());
-                timeTrackingConfig.set(path + ".start_time", session.getStartTime());
-                timeTrackingConfig.set(path + ".end_time", 0L);
-                timeTrackingConfig.set(path + ".duration", 0L);
-                
-                try {
-                    timeTrackingConfig.save(timeTrackingFile);
-                } catch (IOException e) {
-                    plugin.getLogger().log(Level.SEVERE, "Ошибка сохранения сессии в файл", e);
+            synchronized (timeTrackingFileLock) {
+                if (!timeTrackingConfig.contains(path)) {
+                    timeTrackingConfig.set(path + ".player_name", session.getPlayerName());
+                    timeTrackingConfig.set(path + ".status", session.getStatus());
+                    timeTrackingConfig.set(path + ".start_time", session.getStartTime());
+                    timeTrackingConfig.set(path + ".end_time", 0L);
+                    timeTrackingConfig.set(path + ".duration", 0L);
                 }
             }
+            scheduleTimeTrackingFileSave();
         }
     }
     
     private void updateSessionInDatabase(WorkSession session) {
         if (plugin.getDatabaseManager().isConnected()) {
-            String query = "UPDATE time_tracking SET end_time = ?, duration = ? WHERE player_uuid = ? AND start_time = ?";
-            
-            try (PreparedStatement stmt = plugin.getDatabaseManager().getConnection().prepareStatement(query)) {
-                stmt.setLong(1, session.getEndTime());
-                stmt.setLong(2, session.getDuration());
-                stmt.setString(3, session.getPlayerUUID().toString());
-                stmt.setLong(4, session.getStartTime());
-                stmt.executeUpdate();
-            } catch (SQLException e) {
-                plugin.getLogger().log(Level.SEVERE, "Ошибка обновления сессии в БД", e);
-            }
+            plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+                String query = "UPDATE time_tracking SET end_time = ?, duration = ? WHERE player_uuid = ? AND start_time = ?";
+                
+                try (Connection conn = plugin.getDatabaseManager().getConnection();
+                     PreparedStatement stmt = conn.prepareStatement(query)) {
+                    stmt.setLong(1, session.getEndTime());
+                    stmt.setLong(2, session.getDuration());
+                    stmt.setString(3, session.getPlayerUUID().toString());
+                    stmt.setLong(4, session.getStartTime());
+                    stmt.executeUpdate();
+                } catch (SQLException e) {
+                    plugin.getLogger().log(Level.SEVERE, "Ошибка обновления сессии в БД", e);
+                }
+            });
         } else {
             // Обновляем в файле
-            String path = "sessions." + session.getPlayerUUID().toString();
-            if (timeTrackingConfig.contains(path)) {
-                for (String sessionId : timeTrackingConfig.getConfigurationSection(path).getKeys(false)) {
-                    String sessionPath = path + "." + sessionId;
-                    if (timeTrackingConfig.getLong(sessionPath + ".start_time") == session.getStartTime()) {
-                        timeTrackingConfig.set(sessionPath + ".end_time", session.getEndTime());
-                        timeTrackingConfig.set(sessionPath + ".duration", session.getDuration());
-                        
-                        try {
-                            timeTrackingConfig.save(timeTrackingFile);
-                        } catch (IOException e) {
-                            plugin.getLogger().log(Level.SEVERE, "Ошибка обновления сессии в файле", e);
-                        }
-                        break;
-                    }
+            String path = "sessions." + session.getPlayerUUID().toString() + "." + session.getStartTime();
+            synchronized (timeTrackingFileLock) {
+                if (timeTrackingConfig.contains(path)) {
+                    timeTrackingConfig.set(path + ".end_time", session.getEndTime());
+                    timeTrackingConfig.set(path + ".duration", session.getDuration());
                 }
             }
+            scheduleTimeTrackingFileSave();
         }
     }
     

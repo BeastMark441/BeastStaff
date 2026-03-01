@@ -4,10 +4,10 @@
 
 ## Поддерживаемые версии
 
-- **Minecraft:** 1.16.5 - 1.21.11+
-- **Java:** 21+ (рекомендуется)
+- **Minecraft:** 1.16.5+ (рекомендуется 1.20.5+/1.21+)
+- **Java:** 21+
 - **Серверы:** Paper, Spigot, Bukkit
-- **API версия:** 1.21
+- **API версия:** 1.16
 
 ## Описание и возможности
 
@@ -73,11 +73,11 @@ BeastStaff - это плагин для Minecraft серверов, предна
 
 | Команда | Описание | Право доступа |
 |---------|----------|---------------|
-| `/beaststaff menu` | Открыть меню статусов | `beaststaff.staff` |
-| `/beaststaff status <статус>` | Изменить свой статус | `beaststaff.staff` |
-| `/beaststaff stats [игрок] [дни]` | Просмотр статистики | `beaststaff.time.stats` |
-| `/beaststaff allstats [дни]` | Общая статистика персонала | `beaststaff.time.admin` |
-| `/beaststaff setstatus <игрок> <статус>` | Установить статус игрока | `beaststaff.time.admin` |
+| `/beaststaff menu` | Открыть меню статусов | `beaststaff.command.menu` |
+| `/beaststaff status <статус>` | Изменить свой статус | `beaststaff.command.status` |
+| `/beaststaff stats [игрок\|дни] [дни]` | Просмотр статистики | `beaststaff.command.stats` / `beaststaff.command.stats.other` |
+| `/beaststaff allstats [дни]` | Общая статистика персонала | `beaststaff.command.allstats` |
+| `/beaststaff setstatus <игрок> <статус>` | Установить статус игрока | `beaststaff.command.setstatus` |
 
 ### Telegram команды (в игре)
 
@@ -106,8 +106,12 @@ BeastStaff - это плагин для Minecraft серверов, предна
 | `beaststaff.admin` | Полный доступ к командам плагина | op |
 | `beaststaff.staff` | Доступ к командам персонала | op |
 | `beaststaff.notify` | Получение уведомлений о входе/выходе | op |
-| `beaststaff.time.admin` | Административные права учёта времени | op |
-| `beaststaff.time.stats` | Просмотр статистики времени работы | op |
+| `beaststaff.command.stats` | Просмотр своей статистики | op |
+| `beaststaff.command.stats.other` | Просмотр чужой статистики | op |
+| `beaststaff.command.allstats` | Общая статистика персонала | op |
+| `beaststaff.command.setstatus` | Установить статус игроку | op
+| `beaststaff.command.telegram` | Управление Telegram привязкой | op |
+| `beaststaff.command.testtelegram` | Тест Telegram | op |
 
 ## Плейсхолдеры
 
@@ -180,5 +184,5 @@ mvn clean package
 - Путь для воспроизведения ошибки(по возможности)
 
 ### Предложения по улучшению
-Я открыты для предложений! 
+Я открыт для предложений! 
 Создайте [Feature Request](https://github.com/BeastMark441/BeastStaff/issues/new) с описанием желаемой функциональности.

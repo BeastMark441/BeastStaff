@@ -7,7 +7,6 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 import ru.beastmark.BeastStaff;
-import ru.beastmark.managers.TimeTrackingManager;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -33,20 +32,28 @@ public class TimeTrackingCommand implements CommandExecutor, TabCompleter {
         switch (args[0].toLowerCase()) {
             case "menu":
             case "bsm":
+                if (!sender.hasPermission("beaststaff.command.menu")) {
+                    sender.sendMessage(plugin.getMessageManager().getMessage("no-permission"));
+                    return true;
+                }
                 if (!(sender instanceof Player)) {
-                    sender.sendMessage("§c[BeastStaff] Эта команда только для игроков!");
+                    sender.sendMessage(plugin.getMessageManager().getMessage("command-player-only"));
                     return true;
                 }
                 handleMenuCommand((Player) sender);
                 break;
                 
             case "status":
+                if (!sender.hasPermission("beaststaff.command.status")) {
+                    sender.sendMessage(plugin.getMessageManager().getMessage("no-permission"));
+                    return true;
+                }
                 if (!(sender instanceof Player)) {
-                    sender.sendMessage("§c[BeastStaff] Эта команда только для игроков!");
+                    sender.sendMessage(plugin.getMessageManager().getMessage("command-player-only"));
                     return true;
                 }
                 if (args.length < 2) {
-                    sender.sendMessage("§c[BeastStaff] Использование: /beaststaff status <статус>");
+                    sender.sendMessage(plugin.getMessageManager().getMessage("usage-status"));
                     return true;
                 }
                 // Объединяем все аргументы после "status" в один статус
@@ -55,38 +62,28 @@ public class TimeTrackingCommand implements CommandExecutor, TabCompleter {
                 break;
                 
             case "stats":
-                if (args.length < 2) {
-                    if (!(sender instanceof Player)) {
-                        sender.sendMessage("§c[BeastStaff] Использование: /beaststaff stats <игрок> [дни]");
-                        return true;
-                    }
-                    handleStatsCommand(sender, ((Player) sender).getName(), args.length > 2 ? Integer.parseInt(args[2]) : 7);
-                } else {
-                    if (!sender.hasPermission("beaststaff.admin")) {
-                        sender.sendMessage("§c[BeastStaff] У вас нет прав для просмотра статистики других игроков!");
-                        return true;
-                    }
-                    int days = args.length > 2 ? Integer.parseInt(args[2]) : 7;
-                    handleStatsCommand(sender, args[1], days);
-                }
+                handleStats(sender, args);
                 break;
                 
             case "allstats":
-                if (!sender.hasPermission("beaststaff.admin")) {
-                    sender.sendMessage("§c[BeastStaff] У вас нет прав для использования этой команды!");
+                if (!sender.hasPermission("beaststaff.command.allstats")) {
+                    sender.sendMessage(plugin.getMessageManager().getMessage("no-permission"));
                     return true;
                 }
-                int days = args.length > 1 ? Integer.parseInt(args[1]) : 7;
-                handleAllStatsCommand(sender, days);
+                int days = args.length > 1 ? parseDaysOrDefault(sender, args[1], 7) : 7;
+                if (days <= 0) {
+                    return true;
+                }
+                handleAllStatsCommand(sender, Math.min(days, 365));
                 break;
                 
             case "setstatus":
-                if (!sender.hasPermission("beaststaff.admin")) {
-                    sender.sendMessage("§c[BeastStaff] У вас нет прав для использования этой команды!");
+                if (!sender.hasPermission("beaststaff.command.setstatus")) {
+                    sender.sendMessage(plugin.getMessageManager().getMessage("no-permission"));
                     return true;
                 }
                 if (args.length < 3) {
-                    sender.sendMessage("§c[BeastStaff] Использование: /beaststaff setstatus <игрок> <статус>");
+                    sender.sendMessage(plugin.getMessageManager().getMessage("usage-setstatus"));
                     return true;
                 }
                 // Объединяем все аргументы после имени игрока в один статус
@@ -95,16 +92,20 @@ public class TimeTrackingCommand implements CommandExecutor, TabCompleter {
                 break;
                 
             case "telegram":
+                if (!sender.hasPermission("beaststaff.command.telegram")) {
+                    sender.sendMessage(plugin.getMessageManager().getMessage("no-permission"));
+                    return true;
+                }
                 if (!(sender instanceof Player)) {
-                    sender.sendMessage("§c[BeastStaff] Эта команда только для игроков!");
+                    sender.sendMessage(plugin.getMessageManager().getMessage("command-player-only"));
                     return true;
                 }
                 handleTelegramCommand((Player) sender, args);
                 break;
                 
             case "testtelegram":
-                if (!sender.hasPermission("beaststaff.admin")) {
-                    sender.sendMessage("§c[BeastStaff] У вас нет прав для использования этой команды!");
+                if (!sender.hasPermission("beaststaff.command.testtelegram")) {
+                    sender.sendMessage(plugin.getMessageManager().getMessage("no-permission"));
                     return true;
                 }
                 handleTestTelegramCommand(sender);
@@ -120,16 +121,16 @@ public class TimeTrackingCommand implements CommandExecutor, TabCompleter {
     
     private void handleMenuCommand(Player player) {
         if (!plugin.getStaffManager().isStaffMember(player.getUniqueId())) {
-            player.sendMessage("§c[BeastStaff] Вы не являетесь сотрудником!");
+            player.sendMessage(plugin.getMessageManager().getMessage("not-staff-self"));
             return;
         }
         
         List<String> statuses = plugin.getTimeTrackingManager().getAvailableStatuses();
         String currentStatus = plugin.getTimeTrackingManager().getPlayerStatus(player.getUniqueId());
         
-        player.sendMessage("§6[BeastStaff] §fМеню статусов:");
-        player.sendMessage("§7Текущий статус: §f" + (currentStatus != null ? currentStatus : "Не установлен"));
-        player.sendMessage("");
+        player.sendMessage(plugin.getMessageManager().getMessage("time-menu-header"));
+        player.sendMessage(plugin.getMessageManager().getMessage("time-menu-current-status", "status", currentStatus != null ? currentStatus : plugin.getMessageManager().getMessage("status-not-set")));
+        player.sendMessage(plugin.getMessageManager().getMessage("time-menu-separator"));
         
         for (int i = 0; i < statuses.size(); i++) {
             String status = statuses.get(i);
@@ -137,26 +138,89 @@ public class TimeTrackingCommand implements CommandExecutor, TabCompleter {
             player.sendMessage(color + (i + 1) + ". " + status);
         }
         
-        player.sendMessage("");
-        player.sendMessage("§7Используйте: §f/beaststaff status <статус>");
+        player.sendMessage(plugin.getMessageManager().getMessage("time-menu-separator"));
+        player.sendMessage(plugin.getMessageManager().getMessage("time-menu-usage"));
     }
     
     private void handleStatusCommand(Player player, String status) {
         if (!plugin.getStaffManager().isStaffMember(player.getUniqueId())) {
-            player.sendMessage("§c[BeastStaff] Вы не являетесь сотрудником!");
+            player.sendMessage(plugin.getMessageManager().getMessage("not-staff-self"));
             return;
         }
         
         List<String> availableStatuses = plugin.getTimeTrackingManager().getAvailableStatuses();
         if (!availableStatuses.contains(status)) {
-            player.sendMessage("§c[BeastStaff] Неизвестный статус: " + status);
-            player.sendMessage("§7Доступные статусы: " + String.join(", ", availableStatuses));
+            player.sendMessage(plugin.getMessageManager().getMessage("unknown-status", "status", status));
+            player.sendMessage(plugin.getMessageManager().getMessage("available-statuses", "statuses", String.join(", ", availableStatuses)));
             return;
         }
         
         plugin.getTimeTrackingManager().startSession(player, status);
     }
     
+    private void handleStats(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player)) {
+            if (args.length < 2) {
+                sender.sendMessage(plugin.getMessageManager().getMessage("usage-stats"));
+                return;
+            }
+            if (!sender.hasPermission("beaststaff.command.stats.other")) {
+                sender.sendMessage(plugin.getMessageManager().getMessage("no-permission"));
+                return;
+            }
+            int days = args.length > 2 ? parseDaysOrDefault(sender, args[2], 7) : 7;
+            if (days <= 0) {
+                return;
+            }
+            handleStatsCommand(sender, args[1], Math.min(days, 365));
+            return;
+        }
+
+        Player player = (Player) sender;
+
+        if (args.length == 1) {
+            if (!sender.hasPermission("beaststaff.command.stats")) {
+                sender.sendMessage(plugin.getMessageManager().getMessage("no-permission"));
+                return;
+            }
+            handleStatsCommand(sender, player.getName(), 7);
+            return;
+        }
+
+        if (args.length == 2) {
+            Integer maybeDays = tryParseInt(args[1]);
+            if (maybeDays != null) {
+                if (!sender.hasPermission("beaststaff.command.stats")) {
+                    sender.sendMessage(plugin.getMessageManager().getMessage("no-permission"));
+                    return;
+                }
+                int days = parseDaysOrDefault(sender, args[1], 7);
+                if (days <= 0) {
+                    return;
+                }
+                handleStatsCommand(sender, player.getName(), Math.min(days, 365));
+                return;
+            }
+
+            if (!sender.hasPermission("beaststaff.command.stats.other")) {
+                sender.sendMessage(plugin.getMessageManager().getMessage("no-permission"));
+                return;
+            }
+            handleStatsCommand(sender, args[1], 7);
+            return;
+        }
+
+        if (!sender.hasPermission("beaststaff.command.stats.other")) {
+            sender.sendMessage(plugin.getMessageManager().getMessage("no-permission"));
+            return;
+        }
+        int days = parseDaysOrDefault(sender, args[2], 7);
+        if (days <= 0) {
+            return;
+        }
+        handleStatsCommand(sender, args[1], Math.min(days, 365));
+    }
+
     private void handleStatsCommand(CommandSender sender, String playerName, int days) {
         Player target = Bukkit.getPlayer(playerName);
         if (target == null) {
@@ -167,23 +231,23 @@ public class TimeTrackingCommand implements CommandExecutor, TabCompleter {
                     .orElse(null);
             
             if (target == null) {
-                sender.sendMessage("§c[BeastStaff] Игрок " + playerName + " не найден!");
+                sender.sendMessage(plugin.getMessageManager().getMessage("player-not-found", "player", playerName));
                 return;
             }
         }
         
         if (!plugin.getStaffManager().isStaffMember(target.getUniqueId())) {
-            sender.sendMessage("§c[BeastStaff] Игрок " + playerName + " не является сотрудником!");
+            sender.sendMessage(plugin.getMessageManager().getMessage("not-staff", "player", playerName));
             return;
         }
         
         Map<String, Long> stats = plugin.getTimeTrackingManager().getPlayerStats(target.getUniqueId(), days);
         String currentStatus = plugin.getTimeTrackingManager().getPlayerStatus(target.getUniqueId());
         
-        sender.sendMessage("§6[BeastStaff] §fСтатистика " + playerName + " за " + days + " дней:");
-        sender.sendMessage("§7Текущий статус: §f" + (currentStatus != null ? currentStatus : "Не установлен"));
-        sender.sendMessage("§7Общее время: §f" + formatTime(stats.getOrDefault("total", 0L)));
-        sender.sendMessage("");
+        sender.sendMessage(plugin.getMessageManager().getMessage("time-stats-header", "player", playerName, "days", String.valueOf(days)));
+        sender.sendMessage(plugin.getMessageManager().getMessage("time-stats-current-status", "status", currentStatus != null ? currentStatus : plugin.getMessageManager().getMessage("status-not-set")));
+        sender.sendMessage(plugin.getMessageManager().getMessage("time-stats-total", "time", formatTime(stats.getOrDefault("total", 0L))));
+        sender.sendMessage(plugin.getMessageManager().getMessage("time-stats-separator"));
         
         for (Map.Entry<String, Long> entry : stats.entrySet()) {
             if (!entry.getKey().equals("total")) {
@@ -195,9 +259,9 @@ public class TimeTrackingCommand implements CommandExecutor, TabCompleter {
     private void handleAllStatsCommand(CommandSender sender, int days) {
         Map<String, Long> stats = plugin.getTimeTrackingManager().getAllStaffStats(days);
         
-        sender.sendMessage("§6[BeastStaff] §fОбщая статистика персонала за " + days + " дней:");
-        sender.sendMessage("§7Общее время: §f" + formatTime(stats.getOrDefault("total", 0L)));
-        sender.sendMessage("");
+        sender.sendMessage(plugin.getMessageManager().getMessage("time-allstats-header", "days", String.valueOf(days)));
+        sender.sendMessage(plugin.getMessageManager().getMessage("time-allstats-total", "time", formatTime(stats.getOrDefault("total", 0L))));
+        sender.sendMessage(plugin.getMessageManager().getMessage("time-stats-separator"));
         
         for (Map.Entry<String, Long> entry : stats.entrySet()) {
             if (!entry.getKey().equals("total")) {
@@ -216,25 +280,25 @@ public class TimeTrackingCommand implements CommandExecutor, TabCompleter {
                     .orElse(null);
             
             if (target == null) {
-                sender.sendMessage("§c[BeastStaff] Игрок " + playerName + " не найден!");
+                sender.sendMessage(plugin.getMessageManager().getMessage("player-not-found", "player", playerName));
                 return;
             }
         }
         
         if (!plugin.getStaffManager().isStaffMember(target.getUniqueId())) {
-            sender.sendMessage("§c[BeastStaff] Игрок " + playerName + " не является сотрудником!");
+            sender.sendMessage(plugin.getMessageManager().getMessage("not-staff", "player", playerName));
             return;
         }
         
         List<String> availableStatuses = plugin.getTimeTrackingManager().getAvailableStatuses();
         if (!availableStatuses.contains(status)) {
-            sender.sendMessage("§c[BeastStaff] Неизвестный статус: " + status);
-            sender.sendMessage("§7Доступные статусы: " + String.join(", ", availableStatuses));
+            sender.sendMessage(plugin.getMessageManager().getMessage("unknown-status", "status", status));
+            sender.sendMessage(plugin.getMessageManager().getMessage("available-statuses", "statuses", String.join(", ", availableStatuses)));
             return;
         }
         
         plugin.getTimeTrackingManager().startSession(target, status);
-        sender.sendMessage("§a[BeastStaff] Статус игрока " + playerName + " изменен на: " + status);
+        sender.sendMessage(plugin.getMessageManager().getMessage("time-setstatus-success", "player", playerName, "status", status));
     }
     
     private String formatTime(long milliseconds) {
@@ -254,23 +318,23 @@ public class TimeTrackingCommand implements CommandExecutor, TabCompleter {
     
     private void handleTelegramCommand(Player player, String[] args) {
         if (!plugin.getStaffManager().isStaffMember(player.getUniqueId())) {
-            player.sendMessage("§c[BeastStaff] Вы не являетесь сотрудником!");
+            player.sendMessage(plugin.getMessageManager().getMessage("not-staff-self"));
             return;
         }
         
         if (args.length < 2) {
-            player.sendMessage("§6[BeastStaff] §fКоманды Telegram:");
-            player.sendMessage("§7/beaststaff telegram bind <ID> §8- Привязать Telegram аккаунт");
-            player.sendMessage("§7/beaststaff telegram unbind §8- Отвязать Telegram аккаунт");
-            player.sendMessage("§7/beaststaff telegram status §8- Статус привязки");
+            player.sendMessage(plugin.getMessageManager().getMessage("telegram-help-header"));
+            player.sendMessage(plugin.getMessageManager().getMessage("telegram-help-bind"));
+            player.sendMessage(plugin.getMessageManager().getMessage("telegram-help-unbind"));
+            player.sendMessage(plugin.getMessageManager().getMessage("telegram-help-status"));
             return;
         }
         
         switch (args[1].toLowerCase()) {
             case "bind":
                 if (args.length < 3) {
-                    player.sendMessage("§c[BeastStaff] Использование: /beaststaff telegram bind <Telegram ID>");
-                    player.sendMessage("§7Для получения ID отправьте боту @userinfobot команду /start");
+                    player.sendMessage(plugin.getMessageManager().getMessage("telegram-bind-usage"));
+                    player.sendMessage(plugin.getMessageManager().getMessage("telegram-bind-hint"));
                     return;
                 }
                 handleTelegramBind(player, args[2]);
@@ -285,67 +349,88 @@ public class TimeTrackingCommand implements CommandExecutor, TabCompleter {
                 break;
                 
             default:
-                player.sendMessage("§c[BeastStaff] Неизвестная команда. Используйте: bind, unbind, status");
+                player.sendMessage(plugin.getMessageManager().getMessage("telegram-unknown-subcommand"));
                 break;
         }
     }
     
     private void handleTelegramBind(Player player, String telegramId) {
         if (plugin.getTelegramBindingManager().bindPlayer(player.getUniqueId(), telegramId)) {
-            player.sendMessage("§a[BeastStaff] Ваш Telegram аккаунт успешно привязан!");
-            player.sendMessage("§7Теперь вы будете получать персональные уведомления.");
+            player.sendMessage(plugin.getMessageManager().getMessage("telegram-bind-success"));
+            player.sendMessage(plugin.getMessageManager().getMessage("telegram-bind-success-hint"));
         } else {
-            player.sendMessage("§c[BeastStaff] Ошибка привязки Telegram аккаунта!");
+            player.sendMessage(plugin.getMessageManager().getMessage("telegram-bind-error"));
         }
     }
     
     private void handleTelegramUnbind(Player player) {
         if (plugin.getTelegramBindingManager().unbindPlayer(player.getUniqueId())) {
-            player.sendMessage("§a[BeastStaff] Ваш Telegram аккаунт отвязан!");
+            player.sendMessage(plugin.getMessageManager().getMessage("telegram-unbind-success"));
         } else {
-            player.sendMessage("§c[BeastStaff] У вас нет привязанного Telegram аккаунта!");
+            player.sendMessage(plugin.getMessageManager().getMessage("telegram-unbind-not-bound"));
         }
     }
     
     private void handleTelegramStatus(Player player) {
         if (plugin.getTelegramBindingManager().isPlayerBound(player.getUniqueId())) {
             String telegramId = plugin.getTelegramBindingManager().getPlayerTelegramId(player.getUniqueId());
-            player.sendMessage("§a[BeastStaff] Ваш Telegram аккаунт привязан!");
-            player.sendMessage("§7ID: " + telegramId);
+            player.sendMessage(plugin.getMessageManager().getMessage("telegram-status-bound"));
+            player.sendMessage(plugin.getMessageManager().getMessage("telegram-status-id", "id", telegramId));
         } else {
-            player.sendMessage("§e[BeastStaff] У вас нет привязанного Telegram аккаунта.");
-            player.sendMessage("§7Используйте: /beaststaff telegram bind <ID>");
+            player.sendMessage(plugin.getMessageManager().getMessage("telegram-status-not-bound"));
+            player.sendMessage(plugin.getMessageManager().getMessage("telegram-status-usage"));
         }
     }
     
     private void handleTestTelegramCommand(CommandSender sender) {
-        sender.sendMessage("§6[BeastStaff] §fТестирование Telegram интеграции:");
+        sender.sendMessage(plugin.getMessageManager().getMessage("telegram-test-header"));
         
         if (!plugin.getTelegramIntegration().isEnabled()) {
-            sender.sendMessage("§cTelegram интеграция отключена!");
+            sender.sendMessage(plugin.getMessageManager().getMessage("telegram-test-disabled"));
             return;
         }
         
-        sender.sendMessage("§aTelegram интеграция включена!");
+        sender.sendMessage(plugin.getMessageManager().getMessage("telegram-test-enabled"));
         
         // Отправляем тестовое сообщение
-        plugin.getTelegramIntegration().sendMessage("🧪 *Тестовое сообщение*\n" +
-                "Отправлено: " + new java.text.SimpleDateFormat("dd.MM.yyyy HH:mm:ss").format(new java.util.Date()) + "\n" +
-                "Отправитель: " + sender.getName());
+        plugin.getTelegramIntegration().sendMessage(plugin.getMessageManager().getMessage("telegram-test-message",
+                "time", new java.text.SimpleDateFormat("dd.MM.yyyy HH:mm:ss").format(new java.util.Date()),
+                "sender", sender.getName()));
         
-        sender.sendMessage("§aТестовое сообщение отправлено в Telegram канал!");
+        sender.sendMessage(plugin.getMessageManager().getMessage("telegram-test-sent"));
     }
     
     private void sendHelpMessage(CommandSender sender) {
-        sender.sendMessage("§6[BeastStaff] §fКоманды учёта времени:");
-        sender.sendMessage("§7/beaststaff menu §8- Открыть меню статусов");
-        sender.sendMessage("§7/beaststaff status <статус> §8- Изменить статус");
-        sender.sendMessage("§7/beaststaff stats [игрок] [дни] §8- Просмотр статистики");
-        sender.sendMessage("§7/beaststaff allstats [дни] §8- Общая статистика персонала");
-        sender.sendMessage("§7/beaststaff telegram §8- Управление Telegram привязками");
+        sender.sendMessage(plugin.getMessageManager().getMessage("time-help-header"));
+        sender.sendMessage(plugin.getMessageManager().getMessage("time-help-menu"));
+        sender.sendMessage(plugin.getMessageManager().getMessage("time-help-status"));
+        sender.sendMessage(plugin.getMessageManager().getMessage("time-help-stats"));
+        sender.sendMessage(plugin.getMessageManager().getMessage("time-help-allstats"));
+        sender.sendMessage(plugin.getMessageManager().getMessage("time-help-telegram"));
         if (sender.hasPermission("beaststaff.admin")) {
-            sender.sendMessage("§7/beaststaff setstatus <игрок> <статус> §8- Установить статус игрока");
-            sender.sendMessage("§7/beaststaff testtelegram §8- Тестирование Telegram интеграции");
+            sender.sendMessage(plugin.getMessageManager().getMessage("time-help-setstatus"));
+            sender.sendMessage(plugin.getMessageManager().getMessage("time-help-testtelegram"));
+        }
+    }
+
+    private int parseDaysOrDefault(CommandSender sender, String raw, int defaultValue) {
+        Integer value = tryParseInt(raw);
+        if (value == null) {
+            sender.sendMessage(plugin.getMessageManager().getMessage("time-days-invalid", "value", raw));
+            return -1;
+        }
+        if (value <= 0) {
+            sender.sendMessage(plugin.getMessageManager().getMessage("time-days-invalid", "value", raw));
+            return -1;
+        }
+        return value;
+    }
+
+    private Integer tryParseInt(String raw) {
+        try {
+            return Integer.parseInt(raw);
+        } catch (NumberFormatException e) {
+            return null;
         }
     }
     
@@ -367,10 +452,14 @@ public class TimeTrackingCommand implements CommandExecutor, TabCompleter {
             if (args[0].equalsIgnoreCase("status")) {
                 completions.addAll(plugin.getTimeTrackingManager().getAvailableStatuses());
             } else if (args[0].equalsIgnoreCase("stats") || args[0].equalsIgnoreCase("setstatus")) {
-                return Bukkit.getOnlinePlayers().stream()
-                        .map(Player::getName)
-                        .filter(name -> name.toLowerCase().startsWith(args[1].toLowerCase()))
-                        .collect(Collectors.toList());
+                List<String> players = new ArrayList<>();
+                for (Player online : Bukkit.getOnlinePlayers()) {
+                    String name = online.getName();
+                    if (name.toLowerCase().startsWith(args[1].toLowerCase())) {
+                        players.add(name);
+                    }
+                }
+                return players;
             } else if (args[0].equalsIgnoreCase("allstats")) {
                 completions.add("7");
                 completions.add("30");

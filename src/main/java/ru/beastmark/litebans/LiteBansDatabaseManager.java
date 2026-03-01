@@ -1,5 +1,7 @@
 package ru.beastmark.litebans;
 
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 import ru.beastmark.BeastStaff;
 import org.bukkit.configuration.file.FileConfiguration;
 
@@ -13,7 +15,7 @@ import java.sql.*;
 public class LiteBansDatabaseManager {
     
     private final BeastStaff plugin;
-    private Connection connection;
+    private HikariDataSource dataSource;
     private boolean useSameDatabase;
     private String databaseType;
     
@@ -25,90 +27,57 @@ public class LiteBansDatabaseManager {
         if (!useSameDatabase) {
             // Определяем тип БД из конфига
             this.databaseType = config.getString("integrations.litebans.database.type", "mysql").toLowerCase();
+            initializeDataSource();
         }
     }
     
-    /**
-     * Получить подключение к БД LiteBans
-     */
-    public Connection getConnection() {
-        // Проверяем существующее подключение
-        if (connection != null) {
-            try {
-                if (connection.isClosed() || !connection.isValid(2)) {
-                    connection = null;
-                } else {
-                    return connection;
-                }
-            } catch (SQLException e) {
-                connection = null;
-            }
+    private void initializeDataSource() {
+        if (dataSource != null && !dataSource.isClosed()) {
+            dataSource.close();
         }
-        
-        // Создаём новое подключение
-        if (useSameDatabase) {
-            // Используем ту же БД, что и BeastStaff
-            connection = plugin.getDatabaseManager().getConnection();
-            return connection;
-        } else {
-            // Подключаемся к отдельной БД LiteBans
-            return connectToSeparateDatabase();
-        }
-    }
-    
-    /**
-     * Подключение к отдельной БД LiteBans
-     */
-    private Connection connectToSeparateDatabase() {
-        FileConfiguration config = plugin.getConfig();
         
         try {
             if (databaseType.equals("sqlite")) {
-                return connectToSQLite(config);
+                initializeSQLite();
             } else {
-                // По умолчанию MySQL
-                return connectToMySQL(config);
+                initializeMySQL();
             }
-        } catch (SQLException e) {
-            plugin.getLogger().severe("Ошибка подключения к БД LiteBans: " + e.getMessage());
-            if (plugin.getConfig().getBoolean("debug.log-sql", false)) {
-                e.printStackTrace();
-            }
-            return null;
+        } catch (Exception e) {
+            plugin.getLogger().severe("Ошибка инициализации БД LiteBans: " + e.getMessage());
         }
     }
     
-    /**
-     * Подключение к MySQL БД LiteBans
-     */
-    private Connection connectToMySQL(FileConfiguration config) throws SQLException {
+    private void initializeMySQL() {
+        FileConfiguration config = plugin.getConfig();
         String host = config.getString("integrations.litebans.database.host", "localhost");
         int port = config.getInt("integrations.litebans.database.port", 3306);
         String database = config.getString("integrations.litebans.database.database", "litebans");
         String username = config.getString("integrations.litebans.database.username", "");
         String password = config.getString("integrations.litebans.database.password", "");
         
-        String url = "jdbc:mysql://" + host + ":" + port + "/" + database + 
-                    "?useSSL=false&autoReconnect=true&useUnicode=true&characterEncoding=UTF-8";
+        HikariConfig hikariConfig = new HikariConfig();
+        hikariConfig.setJdbcUrl("jdbc:mysql://" + host + ":" + port + "/" + database);
+        hikariConfig.setUsername(username);
+        hikariConfig.setPassword(password);
+        hikariConfig.setPoolName("BeastStaff-LiteBans-MySQL-Pool");
         
-        connection = DriverManager.getConnection(url, username, password);
-        plugin.getLogger().info("✓ Подключение к MySQL БД LiteBans установлено: " + host + ":" + port + "/" + database);
-        return connection;
+        // Оптимизации
+        hikariConfig.addDataSourceProperty("cachePrepStmts", "true");
+        hikariConfig.addDataSourceProperty("prepStmtCacheSize", "250");
+        hikariConfig.addDataSourceProperty("prepStmtCacheSqlLimit", "2048");
+        
+        dataSource = new HikariDataSource(hikariConfig);
+        plugin.getLogger().info("✓ Подключение к MySQL БД LiteBans установлено (HikariCP)");
     }
     
-    /**
-     * Подключение к SQLite БД LiteBans
-     */
-    private Connection connectToSQLite(FileConfiguration config) throws SQLException {
-        // Путь к файлу БД LiteBans
+    private void initializeSQLite() throws SQLException {
+        FileConfiguration config = plugin.getConfig();
         String dbPath = config.getString("integrations.litebans.database.path", "");
         
         if (dbPath.isEmpty()) {
-            // Пытаемся найти БД в стандартных местах
+            // Поиск БД (как в оригинальном коде)
             File pluginsFolder = plugin.getDataFolder().getParentFile();
             File litebansFolder = new File(pluginsFolder, "LiteBans");
-            
-            // Проверяем стандартные пути
             File[] possiblePaths = {
                 new File(litebansFolder, "litebans.db"),
                 new File(litebansFolder, "database.db"),
@@ -119,55 +88,55 @@ public class LiteBansDatabaseManager {
             for (File dbFile : possiblePaths) {
                 if (dbFile.exists() && dbFile.isFile()) {
                     dbPath = dbFile.getAbsolutePath();
-                    plugin.getLogger().info("Найдена SQLite БД LiteBans: " + dbPath);
                     break;
                 }
             }
             
             if (dbPath.isEmpty()) {
-                throw new SQLException("SQLite БД LiteBans не найдена! Укажите путь в config.yml: integrations.litebans.database.path");
-            }
-        } else {
-            // Используем указанный путь
-            File dbFile = new File(dbPath);
-            if (!dbFile.exists()) {
-                throw new SQLException("SQLite БД не найдена по указанному пути: " + dbPath);
+                throw new SQLException("SQLite БД LiteBans не найдена!");
             }
         }
         
-        String url = "jdbc:sqlite:" + dbPath;
-        connection = DriverManager.getConnection(url);
-        plugin.getLogger().info("✓ Подключение к SQLite БД LiteBans установлено: " + dbPath);
-        return connection;
+        HikariConfig hikariConfig = new HikariConfig();
+        hikariConfig.setJdbcUrl("jdbc:sqlite:" + dbPath);
+        hikariConfig.setPoolName("BeastStaff-LiteBans-SQLite-Pool");
+        hikariConfig.setMaximumPoolSize(1);
+        
+        dataSource = new HikariDataSource(hikariConfig);
+        plugin.getLogger().info("✓ Подключение к SQLite БД LiteBans установлено (HikariCP): " + dbPath);
+    }
+
+    /**
+     * Получить подключение к БД LiteBans
+     */
+    public Connection getConnection() throws SQLException {
+        if (useSameDatabase) {
+            return plugin.getDatabaseManager().getConnection();
+        } else {
+            if (dataSource == null) {
+                throw new SQLException("БД LiteBans не инициализирована!");
+            }
+            return dataSource.getConnection();
+        }
     }
     
     /**
      * Проверить, подключены ли к БД
      */
     public boolean isConnected() {
-        if (connection == null) return false;
-        try {
-            return !connection.isClosed() && connection.isValid(2);
-        } catch (SQLException e) {
-            return false;
+        if (useSameDatabase) {
+            return plugin.getDatabaseManager().isConnected();
         }
+        return dataSource != null && !dataSource.isClosed();
     }
     
     /**
      * Закрыть подключение
      */
     public void closeConnection() {
-        if (connection != null) {
-            try {
-                // Закрываем только если это отдельное подключение
-                if (!useSameDatabase && connection != plugin.getDatabaseManager().getConnection()) {
-                    connection.close();
-                    plugin.getLogger().info("Подключение к БД LiteBans закрыто");
-                }
-                connection = null;
-            } catch (SQLException e) {
-                plugin.getLogger().warning("Ошибка закрытия соединения LiteBans: " + e.getMessage());
-            }
+        if (!useSameDatabase && dataSource != null && !dataSource.isClosed()) {
+            dataSource.close();
+            plugin.getLogger().info("Подключение к БД LiteBans закрыто");
         }
     }
     

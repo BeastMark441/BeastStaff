@@ -2,6 +2,7 @@ package ru.beastmark.telegram.commands;
 
 import ru.beastmark.BeastStaff;
 
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -20,27 +21,23 @@ public class StatusCommand {
         UUID playerUuid = plugin.getTelegramBindingManager().getPlayerByTelegramId(telegramId);
         
         if (playerUuid == null) {
-            return "❌ Ваш Telegram аккаунт не привязан к игровому аккаунту.\n" +
-                   "Используйте команду в игре: /bs telegram bind";
+            return plugin.getMessageManager().getMessage("telegram-status-not-bound");
         }
         
         // Получить текущий статус
         String currentStatus = plugin.getTimeTrackingManager().getPlayerStatus(playerUuid);
         
         if (currentStatus == null || currentStatus.isEmpty()) {
-            currentStatus = "Не установлен";
+            currentStatus = plugin.getMessageManager().getMessage("status-not-set");
         }
         
         // Получить статистику за сегодня
-        var stats = plugin.getTimeTrackingManager().getPlayerStats(playerUuid, 1);
+        Map<String, Long> stats = plugin.getTimeTrackingManager().getPlayerStats(playerUuid, 1);
         long totalTime = stats.getOrDefault("total", 0L);
         
-        StringBuilder sb = new StringBuilder();
-        sb.append("📊 *Ваш статус:*\n\n");
-        sb.append("Статус: `").append(currentStatus).append("`\n");
-        sb.append("Время работы сегодня: `").append(formatTime(totalTime)).append("`\n");
-        
-        return sb.toString();
+        return plugin.getMessageManager().getMessage("telegram-status-response",
+                "status", currentStatus,
+                "time", formatTime(totalTime));
     }
     
     private String formatTime(long milliseconds) {

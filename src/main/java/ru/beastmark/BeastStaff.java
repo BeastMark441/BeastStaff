@@ -28,6 +28,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import ru.beastmark.managers.MessageManager;
+
 public class BeastStaff extends JavaPlugin {
     
     private static BeastStaff instance;
@@ -37,6 +39,7 @@ public class BeastStaff extends JavaPlugin {
     private TelegramIntegration telegramIntegration;
     private TelegramBindingManager telegramBindingManager;
     private LiteBansManager liteBansManager;
+    private MessageManager messageManager;
     private TelegramBot telegramBot;
     private Map<String, Object> telegramCommands;
     
@@ -47,6 +50,9 @@ public class BeastStaff extends JavaPlugin {
         // Сохраняем конфигурацию по умолчанию
         saveDefaultConfig();
         
+        // Инициализируем менеджер сообщений
+        messageManager = new MessageManager(this);
+
         // Инициализируем менеджер базы данных
         databaseManager = new DatabaseManager(this);
         
@@ -112,7 +118,7 @@ public class BeastStaff extends JavaPlugin {
                 } catch (Exception e) {
                     getLogger().severe("Ошибка при выполнении команды " + label + ": " + e.getMessage());
                     e.printStackTrace();
-                    sender.sendMessage("§c[BeastStaff] Произошла ошибка при выполнении команды. Проверьте логи.");
+                    sender.sendMessage(getMessageManager().getMessage("command-exception"));
                     return true;
                 }
             }
@@ -186,6 +192,7 @@ public class BeastStaff extends JavaPlugin {
         // Регистрируем PlaceholderAPI расширение
         if (getServer().getPluginManager().getPlugin("PlaceholderAPI") != null) {
             new TimeTrackingExpansion(this).register();
+            timeTrackingManager.startPlaceholderCache();
             getLogger().info("PlaceholderAPI расширение зарегистрировано!");
         }
         
@@ -211,12 +218,14 @@ public class BeastStaff extends JavaPlugin {
         // Сохраняем данные перед выгрузкой
         if (timeTrackingManager != null) {
             timeTrackingManager.saveAllSessions();
+            timeTrackingManager.flushTimeTrackingFileSaveSync();
+            timeTrackingManager.stopPlaceholderCache();
         }
         if (staffManager != null) {
-            staffManager.saveData();
+            staffManager.flushSaveSync();
         }
         if (telegramBindingManager != null) {
-            telegramBindingManager.saveBindings();
+            telegramBindingManager.flushSaveSync();
         }
         if (telegramBot != null) {
             telegramBot.stop();
@@ -261,6 +270,10 @@ public class BeastStaff extends JavaPlugin {
     
     public DatabaseManager getDatabaseManager() {
         return databaseManager;
+    }
+
+    public MessageManager getMessageManager() {
+        return messageManager;
     }
     
     public TelegramIntegration getTelegramIntegration() {

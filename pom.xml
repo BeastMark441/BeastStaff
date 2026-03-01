@@ -6,7 +6,7 @@
 
     <groupId>ru.beastmark</groupId>
     <artifactId>BeastStaff</artifactId>
-    <version>2.0.0</version>
+    <version>3.0.0</version>
     <packaging>jar</packaging>
 
     <name>BeastStaff</name>
@@ -27,26 +27,24 @@
             <id>spigot-repo</id>
             <url>https://hub.spigotmc.org/nexus/content/repositories/snapshots/</url>
         </repository>
+        <repository>
+            <id>placeholderapi</id>
+            <url>https://repo.extendedclip.com/content/repositories/placeholderapi/</url>
+        </repository>
     </repositories>
 
     <dependencies>
         <dependency>
-            <groupId>io.papermc.paper</groupId>
-            <artifactId>paper-api</artifactId>
-            <version>1.21.11-pre3-R0.1-SNAPSHOT</version>
+            <groupId>org.spigotmc</groupId>
+            <artifactId>spigot-api</artifactId>
+            <version>1.16.5-R0.1-SNAPSHOT</version>
             <scope>provided</scope>
-        </dependency>
-        <!-- Telegram Bot API -->
-        <dependency>
-            <groupId>org.telegram</groupId>
-            <artifactId>telegrambots</artifactId>
-            <version>6.9.7.1</version>
         </dependency>
         <!-- HikariCP для connection pooling -->
         <dependency>
             <groupId>com.zaxxer</groupId>
             <artifactId>HikariCP</artifactId>
-            <version>5.1.0</version>
+            <version>4.0.3</version>
         </dependency>
         <!-- MySQL Connector -->
         <dependency>
@@ -59,6 +57,19 @@
             <groupId>org.xerial</groupId>
             <artifactId>sqlite-jdbc</artifactId>
             <version>3.44.1.0</version>
+        </dependency>
+        <!-- H2 -->
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <version>2.2.224</version>
+        </dependency>
+        <!-- PlaceholderAPI -->
+        <dependency>
+            <groupId>me.clip</groupId>
+            <artifactId>placeholderapi</artifactId>
+            <version>2.11.5</version>
+            <scope>provided</scope>
         </dependency>
     </dependencies>
 

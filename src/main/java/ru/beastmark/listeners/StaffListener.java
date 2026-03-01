@@ -23,12 +23,12 @@ public class StaffListener implements Listener {
         
         if (staffManager.isStaffMember(player.getUniqueId())) {
             StaffManager.StaffMember member = staffManager.getStaffMember(player.getUniqueId());
-            player.sendMessage("§a[BeastStaff] Добро пожаловать! Ваш ранг: " + member.getRank());
+            player.sendMessage(plugin.getMessageManager().getMessage("staff-welcome", "rank", member.getRank()));
             
             // Уведомляем других игроков о входе персонала
             for (Player onlinePlayer : plugin.getServer().getOnlinePlayers()) {
                 if (onlinePlayer.hasPermission("beaststaff.notify") && !onlinePlayer.equals(player)) {
-                    onlinePlayer.sendMessage("§6[BeastStaff] " + member.getName() + " (" + member.getRank() + ") зашел на сервер!");
+                    onlinePlayer.sendMessage(plugin.getMessageManager().getMessage("staff-join-notify", "player", member.getName(), "rank", member.getRank()));
                 }
             }
             
@@ -50,7 +50,7 @@ public class StaffListener implements Listener {
             // Уведомляем других игроков о выходе персонала
             for (Player onlinePlayer : plugin.getServer().getOnlinePlayers()) {
                 if (onlinePlayer.hasPermission("beaststaff.notify")) {
-                    onlinePlayer.sendMessage("§6[BeastStaff] " + member.getName() + " (" + member.getRank() + ") покинул сервер!");
+                    onlinePlayer.sendMessage(plugin.getMessageManager().getMessage("staff-quit-notify", "player", member.getName(), "rank", member.getRank()));
                 }
             }
             

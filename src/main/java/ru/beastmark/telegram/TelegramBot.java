@@ -27,7 +27,6 @@ import java.util.regex.Pattern;
 public class TelegramBot {
     
     private final BeastStaff plugin;
-    private final TelegramIntegration telegramIntegration;
     private final String botToken;
     private BukkitTask pollingTask;
     private AtomicInteger lastUpdateId = new AtomicInteger(0);
@@ -37,7 +36,6 @@ public class TelegramBot {
     
     public TelegramBot(BeastStaff plugin, TelegramIntegration telegramIntegration) {
         this.plugin = plugin;
-        this.telegramIntegration = telegramIntegration;
         this.botToken = telegramIntegration.getBotToken();
         this.commandHandlers = new HashMap<>();
         
@@ -206,12 +204,9 @@ public class TelegramBot {
         Object handler = commandHandlers.get(command);
         
         if (handler == null) {
-            return "❌ Неизвестная команда: /" + command + "\n\n" +
-                   "Доступные команды:\n" +
-                   "/bs_ban_stats - Статистика наказаний\n" +
-                   "/bs_recent_bans - Последние наказания\n" +
-                   "/bs_status - Мой статус\n" +
-                   "/bs_set_status - Изменить статус";
+            return plugin.getMessageManager().getMessage("telegram-bot-unknown-command",
+                    "command", command,
+                    "help", getHelpMessage());
         }
         
         try {
@@ -226,10 +221,17 @@ public class TelegramBot {
             }
         } catch (Exception e) {
             plugin.getLogger().log(Level.SEVERE, "Ошибка выполнения команды " + command, e);
-            return "❌ Ошибка выполнения команды: " + e.getMessage();
+            return plugin.getMessageManager().getMessage("telegram-bot-command-error", "error", e.getMessage());
         }
         
-        return "❌ Команда не поддерживается";
+        return plugin.getMessageManager().getMessage("telegram-bot-command-unsupported");
+    }
+
+    private String getHelpMessage() {
+        if (commandHandlers.containsKey("bs_ban_stats") || commandHandlers.containsKey("bs_recent_bans")) {
+            return plugin.getMessageManager().getMessage("telegram-bot-help-with-litebans");
+        }
+        return plugin.getMessageManager().getMessage("telegram-bot-help-no-litebans");
     }
     
     private void sendMessage(String chatId, String text) {

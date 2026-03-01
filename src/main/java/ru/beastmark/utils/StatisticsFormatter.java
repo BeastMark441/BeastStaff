@@ -1,5 +1,6 @@
 package ru.beastmark.utils;
 
+import ru.beastmark.BeastStaff;
 import ru.beastmark.litebans.PunishmentStats;
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
@@ -15,41 +16,44 @@ public class StatisticsFormatter {
     /**
      * Форматировать статистику наказаний
      */
-    public static String formatStats(PunishmentStats stats, String period) {
+    public static String formatStats(BeastStaff plugin, PunishmentStats stats, String period) {
         StringBuilder sb = new StringBuilder();
         
-        sb.append("📊 *Статистика наказаний за ").append(period).append("*\n\n");
+        sb.append(plugin.getMessageManager().getMessage("telegram-punishment-stats-header", "period", period));
         
         // Общая статистика
-        sb.append("🔴 *Баны:*\n");
-        sb.append("Всего: `").append(stats.bans).append("`\n");
-        sb.append("Активных: `").append(stats.activeBans).append("`\n\n");
+        sb.append(plugin.getMessageManager().getMessage("telegram-punishment-stats-bans",
+                "total", String.valueOf(stats.bans),
+                "active", String.valueOf(stats.activeBans)));
         
-        sb.append("🔇 *Муты:*\n");
-        sb.append("Всего: `").append(stats.mutes).append("`\n");
-        sb.append("Активных: `").append(stats.activeMutes).append("`\n\n");
+        sb.append(plugin.getMessageManager().getMessage("telegram-punishment-stats-mutes",
+                "total", String.valueOf(stats.mutes),
+                "active", String.valueOf(stats.activeMutes)));
         
-        sb.append("👢 *Кики:* `").append(stats.kicks).append("`\n\n");
+        sb.append(plugin.getMessageManager().getMessage("telegram-punishment-stats-kicks", "count", String.valueOf(stats.kicks)));
         
         if (stats.warnings > 0) {
-            sb.append("⚠️ *Предупреждения:* `").append(stats.warnings).append("`\n\n");
+            sb.append(plugin.getMessageManager().getMessage("telegram-punishment-stats-warnings", "count", String.valueOf(stats.warnings)));
         }
         
         // Топ модераторы
         if (!stats.topModerators.isEmpty()) {
-            sb.append("👑 *Топ модераторы:*\n");
+            sb.append(plugin.getMessageManager().getMessage("telegram-punishment-stats-top-moderators-header"));
             int rank = 1;
             for (Map<String, Object> mod : stats.topModerators) {
                 String name = (String) mod.get("name");
                 Integer count = (Integer) mod.get("count");
-                sb.append(String.format("%d. `%s` - %d\n", rank++, name, count));
+                sb.append(plugin.getMessageManager().getMessage("telegram-punishment-stats-top-item",
+                        "rank", String.valueOf(rank++),
+                        "name", String.valueOf(name),
+                        "count", String.valueOf(count)));
             }
             sb.append("\n");
         }
         
         // Популярные причины
         if (!stats.topReasons.isEmpty()) {
-            sb.append("📝 *Популярные причины:*\n");
+            sb.append(plugin.getMessageManager().getMessage("telegram-punishment-stats-top-reasons-header"));
             int rank = 1;
             for (Map<String, Object> reasonMap : stats.topReasons) {
                 String reason = (String) reasonMap.get("name");
@@ -57,7 +61,10 @@ public class StatisticsFormatter {
                 if (reason != null && reason.length() > 30) {
                     reason = reason.substring(0, 27) + "...";
                 }
-                sb.append(String.format("%d. `%s` - %d\n", rank++, reason != null ? reason : "Не указано", count));
+                sb.append(plugin.getMessageManager().getMessage("telegram-punishment-stats-reason-item",
+                        "rank", String.valueOf(rank++),
+                        "reason", reason != null ? reason : plugin.getMessageManager().getMessage("telegram-punishment-stats-reason-not-specified"),
+                        "count", String.valueOf(count)));
             }
             sb.append("\n");
         }
@@ -68,13 +75,13 @@ public class StatisticsFormatter {
     /**
      * Форматировать список последних наказаний
      */
-    public static String formatRecentBans(List<Map<String, Object>> punishments) {
+    public static String formatRecentBans(BeastStaff plugin, List<Map<String, Object>> punishments) {
         StringBuilder sb = new StringBuilder();
         
-        sb.append("🚨 *Последние наказания:*\n\n");
+        sb.append(plugin.getMessageManager().getMessage("telegram-recent-bans-header"));
         
         if (punishments.isEmpty()) {
-            sb.append("📭 Нет последних наказаний");
+            sb.append(plugin.getMessageManager().getMessage("telegram-recent-bans-empty"));
             return sb.toString();
         }
         
@@ -83,13 +90,16 @@ public class StatisticsFormatter {
             String type = getEmojiByType((String) p.get("type"));
             String typeName = ((String) p.get("type")).toUpperCase();
             
-            sb.append(String.format("%s *%s* — `%s`\n", type, p.get("player"), typeName));
-            sb.append(String.format("👨 Модератор: `%s`\n", p.get("moderator")));
-            sb.append(String.format("📝 Причина: `%s`\n", p.get("reason")));
+            sb.append(plugin.getMessageManager().getMessage("telegram-recent-bans-item-line1",
+                    "emoji", type,
+                    "player", String.valueOf(p.get("player")),
+                    "type", typeName));
+            sb.append(plugin.getMessageManager().getMessage("telegram-recent-bans-item-moderator", "moderator", String.valueOf(p.get("moderator"))));
+            sb.append(plugin.getMessageManager().getMessage("telegram-recent-bans-item-reason", "reason", String.valueOf(p.get("reason"))));
             
             Timestamp time = (Timestamp) p.get("time");
             if (time != null) {
-                sb.append(String.format("⏰ Когда: `%s`\n", formatRelativeTime(time)));
+                sb.append(plugin.getMessageManager().getMessage("telegram-recent-bans-item-when", "time", formatRelativeTime(plugin, time)));
             }
             
             Timestamp until = (Timestamp) p.get("until");
@@ -98,13 +108,14 @@ public class StatisticsFormatter {
                 long untilTime = until.getTime();
                 long maxLong = 9223372036854775807L / 1000; // Максимальное значение для постоянных банов
                 if (untilTime < maxLong) {
-                    sb.append(String.format("📅 До: `%s`\n", formatRelativeTime(until)));
+                    sb.append(plugin.getMessageManager().getMessage("telegram-recent-bans-item-until", "until", formatRelativeTime(plugin, until)));
                 } else {
-                    sb.append("📅 До: `Навсегда`\n");
+                    sb.append(plugin.getMessageManager().getMessage("telegram-recent-bans-item-until", "until", plugin.getMessageManager().getMessage("telegram-recent-bans-until-forever")));
                 }
             }
             if (active != null) {
-                sb.append(String.format("Статус: %s\n", active ? "🔴 АКТИВНО" : "🟢 ИСТЕКЛО"));
+                sb.append(plugin.getMessageManager().getMessage("telegram-recent-bans-status-line",
+                        "status", active ? plugin.getMessageManager().getMessage("telegram-recent-bans-status-active") : plugin.getMessageManager().getMessage("telegram-recent-bans-status-expired")));
             }
             
             sb.append("\n");
@@ -136,8 +147,8 @@ public class StatisticsFormatter {
     /**
      * Форматировать время относительно текущего момента
      */
-    private static String formatRelativeTime(Timestamp timestamp) {
-        if (timestamp == null) return "Не указано";
+    private static String formatRelativeTime(BeastStaff plugin, Timestamp timestamp) {
+        if (timestamp == null) return plugin.getMessageManager().getMessage("telegram-time-not-specified");
         
         long time = timestamp.getTime();
         long now = System.currentTimeMillis();
@@ -148,22 +159,22 @@ public class StatisticsFormatter {
         
         // Если меньше минуты
         if (diff < 60000) {
-            return isFuture ? "через несколько секунд" : "только что";
+            return isFuture ? plugin.getMessageManager().getMessage("telegram-time-few-seconds-future") : plugin.getMessageManager().getMessage("telegram-time-just-now");
         }
         // Если меньше часа
         if (diff < 3600000) {
             long minutes = diff / 60000;
-            return isFuture ? "через " + minutes + " мин." : minutes + " мин. назад";
+            return isFuture ? plugin.getMessageManager().getMessage("telegram-time-minutes-future", "minutes", String.valueOf(minutes)) : plugin.getMessageManager().getMessage("telegram-time-minutes-ago", "minutes", String.valueOf(minutes));
         }
         // Если меньше дня
         if (diff < 86400000) {
             long hours = diff / 3600000;
-            return isFuture ? "через " + hours + " ч." : hours + " ч. назад";
+            return isFuture ? plugin.getMessageManager().getMessage("telegram-time-hours-future", "hours", String.valueOf(hours)) : plugin.getMessageManager().getMessage("telegram-time-hours-ago", "hours", String.valueOf(hours));
         }
         // Если меньше недели
         if (diff < 604800000) {
             long days = diff / 86400000;
-            return isFuture ? "через " + days + " дн." : days + " дн. назад";
+            return isFuture ? plugin.getMessageManager().getMessage("telegram-time-days-future", "days", String.valueOf(days)) : plugin.getMessageManager().getMessage("telegram-time-days-ago", "days", String.valueOf(days));
         }
         
         // Иначе показываем полную дату

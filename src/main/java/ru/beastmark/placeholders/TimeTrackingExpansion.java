@@ -1,12 +1,11 @@
 package ru.beastmark.placeholders;
 
+import me.clip.placeholderapi.expansion.PlaceholderExpansion;
 import org.bukkit.entity.Player;
 import ru.beastmark.BeastStaff;
 import ru.beastmark.managers.TimeTrackingManager;
 
-import java.util.Map;
-
-public class TimeTrackingExpansion {
+public class TimeTrackingExpansion extends PlaceholderExpansion {
     
     private final BeastStaff plugin;
     
@@ -14,116 +13,111 @@ public class TimeTrackingExpansion {
         this.plugin = plugin;
     }
     
-    public void register() {
-        // Регистрация PlaceholderAPI расширения
-        // Реализация будет добавлена при наличии PlaceholderAPI
-        plugin.getLogger().info("PlaceholderAPI расширение зарегистрировано!");
+    @Override
+    public String getIdentifier() {
+        return "beaststaff";
     }
-    
-    public String getPlayerStatus(Player player) {
-        if (player == null) return "";
-        
-        if (!plugin.getStaffManager().isStaffMember(player.getUniqueId())) {
-            return "Не сотрудник";
+
+    @Override
+    public String getAuthor() {
+        return "BeastMark";
+    }
+
+    @Override
+    public String getVersion() {
+        return plugin.getDescription().getVersion();
+    }
+
+    @Override
+    public boolean persist() {
+        return true;
+    }
+
+    @Override
+    public String onPlaceholderRequest(Player player, String identifier) {
+        if (player == null || identifier == null) {
+            return "";
         }
-        
-        String status = plugin.getTimeTrackingManager().getPlayerStatus(player.getUniqueId());
-        return status != null ? status : "Не установлен";
-    }
-    
-    public String getPlayerStatusColor(Player player) {
-        if (player == null) return "§7";
-        
+
         if (!plugin.getStaffManager().isStaffMember(player.getUniqueId())) {
+            if (identifier.equalsIgnoreCase("status")) {
+                return plugin.getMessageManager().getMessage("status-not-staff");
+            }
+            if (identifier.equalsIgnoreCase("status_color")) {
+                return "§7";
+            }
+            if (identifier.equalsIgnoreCase("is_working")) {
+                return plugin.getMessageManager().getMessage("placeholder-no");
+            }
+            if (identifier.startsWith("work_time_") || identifier.equalsIgnoreCase("total_work_time") || identifier.equalsIgnoreCase("current_session_time")) {
+                return "0с";
+            }
+            return "";
+        }
+
+        if (identifier.equalsIgnoreCase("status")) {
+            String status = plugin.getTimeTrackingManager().getPlayerStatus(player.getUniqueId());
+            return status != null ? status : plugin.getMessageManager().getMessage("status-not-set");
+        }
+
+        if (identifier.equalsIgnoreCase("status_color")) {
+            String status = plugin.getTimeTrackingManager().getPlayerStatus(player.getUniqueId());
+            if (status == null) {
+                return "§7";
+            }
+            if (status.equals("В работе")) {
+                return "§a";
+            }
+            if (status.equals("AFK")) {
+                return "§e";
+            }
+            if (status.equals("Не в работе")) {
+                return "§c";
+            }
             return "§7";
         }
-        
-        String status = plugin.getTimeTrackingManager().getPlayerStatus(player.getUniqueId());
-        if (status == null) return "§7";
-        
-        switch (status) {
-            case "В работе":
-                return "§a";
-            case "AFK":
-                return "§e";
-            case "Не в работе":
-                return "§c";
-            default:
-                return "§7";
+
+        if (identifier.equalsIgnoreCase("is_working")) {
+            return plugin.getTimeTrackingManager().isPlayerWorking(player.getUniqueId()) ? plugin.getMessageManager().getMessage("placeholder-yes") : plugin.getMessageManager().getMessage("placeholder-no");
         }
+
+        if (identifier.equalsIgnoreCase("current_session_time")) {
+            TimeTrackingManager.WorkSession session = plugin.getTimeTrackingManager().getActiveSession(player.getUniqueId());
+            if (session == null) {
+                return plugin.getMessageManager().getMessage("placeholder-no-active-session");
+            }
+            long duration = System.currentTimeMillis() - session.getStartTime();
+            return formatTime(duration);
+        }
+
+        if (identifier.equalsIgnoreCase("work_time_today")) {
+            return formatWorkTimeWithActiveSession(player, 1);
+        }
+        if (identifier.equalsIgnoreCase("work_time_week")) {
+            return formatWorkTimeWithActiveSession(player, 7);
+        }
+        if (identifier.equalsIgnoreCase("work_time_month")) {
+            return formatWorkTimeWithActiveSession(player, 30);
+        }
+        if (identifier.equalsIgnoreCase("total_work_time")) {
+            return formatWorkTimeWithActiveSession(player, 365);
+        }
+
+        return "";
     }
-    
-    public String getWorkTimeToday(Player player) {
-        if (player == null) return "0с";
-        
-        if (!plugin.getStaffManager().isStaffMember(player.getUniqueId())) {
-            return "0с";
-        }
-        
-        Map<String, Long> stats = plugin.getTimeTrackingManager().getPlayerStats(player.getUniqueId(), 1);
-        return formatTime(stats.getOrDefault("total", 0L));
-    }
-    
-    public String getWorkTimeWeek(Player player) {
-        if (player == null) return "0с";
-        
-        if (!plugin.getStaffManager().isStaffMember(player.getUniqueId())) {
-            return "0с";
-        }
-        
-        Map<String, Long> stats = plugin.getTimeTrackingManager().getPlayerStats(player.getUniqueId(), 7);
-        return formatTime(stats.getOrDefault("total", 0L));
-    }
-    
-    public String getWorkTimeMonth(Player player) {
-        if (player == null) return "0с";
-        
-        if (!plugin.getStaffManager().isStaffMember(player.getUniqueId())) {
-            return "0с";
-        }
-        
-        Map<String, Long> stats = plugin.getTimeTrackingManager().getPlayerStats(player.getUniqueId(), 30);
-        return formatTime(stats.getOrDefault("total", 0L));
-    }
-    
-    public String getTotalWorkTime(Player player) {
-        if (player == null) return "0с";
-        
-        if (!plugin.getStaffManager().isStaffMember(player.getUniqueId())) {
-            return "0с";
-        }
-        
-        Map<String, Long> stats = plugin.getTimeTrackingManager().getPlayerStats(player.getUniqueId(), 365);
-        return formatTime(stats.getOrDefault("total", 0L));
-    }
-    
-    public String isPlayerWorking(Player player) {
-        if (player == null) return "Нет";
-        
-        if (!plugin.getStaffManager().isStaffMember(player.getUniqueId())) {
-            return "Нет";
-        }
-        
-        return plugin.getTimeTrackingManager().isPlayerWorking(player.getUniqueId()) ? "Да" : "Нет";
-    }
-    
-    public String getCurrentSessionTime(Player player) {
-        if (player == null) return "Нет активной сессии";
-        
-        if (!plugin.getStaffManager().isStaffMember(player.getUniqueId())) {
-            return "Нет активной сессии";
-        }
-        
+
+    private String formatWorkTimeWithActiveSession(Player player, int days) {
+        long cached = plugin.getTimeTrackingManager().getCachedTotalWorkTimeMillis(player.getUniqueId(), days);
+        long total = cached >= 0 ? cached : 0L;
+
         TimeTrackingManager.WorkSession session = plugin.getTimeTrackingManager().getActiveSession(player.getUniqueId());
-        if (session == null) {
-            return "Нет активной сессии";
+        if (session != null && session.getStatus() != null && !session.getStatus().equals("Не в работе")) {
+            total += (System.currentTimeMillis() - session.getStartTime());
         }
-        
-        long currentTime = System.currentTimeMillis();
-        long duration = currentTime - session.getStartTime();
-        return formatTime(duration);
+
+        return formatTime(total);
     }
-    
+
     private String formatTime(long milliseconds) {
         long seconds = milliseconds / 1000;
         long hours = seconds / 3600;

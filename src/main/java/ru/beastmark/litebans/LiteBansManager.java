@@ -46,7 +46,7 @@ public class LiteBansManager {
         }
     }
     
-    private Connection getConnection() {
+    private Connection getConnection() throws SQLException {
         return dbManager.getConnection();
     }
     
@@ -54,13 +54,12 @@ public class LiteBansManager {
      * Проверка существования таблиц LiteBans
      */
     private boolean checkLiteBansTables() {
-        Connection connection = getConnection();
-        if (connection == null) {
-            plugin.getLogger().warning("Не удалось получить подключение к БД для проверки таблиц LiteBans");
-            return false;
-        }
-        
-        try {
+        try (Connection connection = getConnection()) {
+            if (connection == null) {
+                plugin.getLogger().warning("Не удалось получить подключение к БД для проверки таблиц LiteBans");
+                return false;
+            }
+            
             String[] requiredTables = {"litebans_bans", "litebans_mutes", "litebans_kicks"};
             String[] optionalTables = {"litebans_warnings"};
             
@@ -147,11 +146,6 @@ public class LiteBansManager {
             return new PunishmentStats();
         }
         
-        Connection connection = getConnection();
-        if (connection == null) {
-            return new PunishmentStats();
-        }
-        
         String cacheKey = "stats_" + from + "_" + to;
         
         if (cache.isValid(cacheKey)) {
@@ -160,29 +154,33 @@ public class LiteBansManager {
         
         PunishmentStats stats = new PunishmentStats();
         
-        try {
+        try (Connection connection = getConnection()) {
+            if (connection == null) {
+                return new PunishmentStats();
+            }
+            
             // Баны
-            stats.bans = countPunishments("litebans_bans", from, to);
-            stats.activeBans = countActivePunishments("litebans_bans", from, to);
+            stats.bans = countPunishments(connection, "litebans_bans", from, to);
+            stats.activeBans = countActivePunishments(connection, "litebans_bans", from, to);
             
             // Муты
-            stats.mutes = countPunishments("litebans_mutes", from, to);
-            stats.activeMutes = countActivePunishments("litebans_mutes", from, to);
+            stats.mutes = countPunishments(connection, "litebans_mutes", from, to);
+            stats.activeMutes = countActivePunishments(connection, "litebans_mutes", from, to);
             
             // Кики
-            stats.kicks = countPunishments("litebans_kicks", from, to);
+            stats.kicks = countPunishments(connection, "litebans_kicks", from, to);
             
             // Предупреждения
-            stats.warnings = countPunishments("litebans_warnings", from, to);
+            stats.warnings = countPunishments(connection, "litebans_warnings", from, to);
             
             // Топ модераторы
-            stats.topModerators = getTopModerators(from, to, 5);
+            stats.topModerators = getTopModerators(connection, from, to, 5);
             
             // Популярные причины
-            stats.topReasons = getTopReasons(from, to, 5);
+            stats.topReasons = getTopReasons(connection, from, to, 5);
             
             // Временной анализ
-            stats.punishmentsByHour = getPunishmentsByHour(from, to);
+            stats.punishmentsByHour = getPunishmentsByHour(connection, from, to);
             
             cache.put(cacheKey, stats, CACHE_TTL);
             
@@ -203,12 +201,11 @@ public class LiteBansManager {
             return punishments;
         }
         
-        Connection connection = getConnection();
-        if (connection == null) {
-            return punishments;
-        }
-        
-        try {
+        try (Connection connection = getConnection()) {
+            if (connection == null) {
+                return punishments;
+            }
+            
             // Получаем последние наказания из всех таблиц
             String query = "(" +
                 "SELECT 'ban' as type, player_name, moderator_name, reason, time, until, active " +
@@ -258,12 +255,11 @@ public class LiteBansManager {
             return history;
         }
         
-        Connection connection = getConnection();
-        if (connection == null) {
-            return history;
-        }
-        
-        try {
+        try (Connection connection = getConnection()) {
+            if (connection == null) {
+                return history;
+            }
+            
             String query = "(" +
                 "SELECT 'ban' as type, moderator_name, reason, time, until " +
                 "FROM litebans_bans WHERE player_name = ? ORDER BY time DESC LIMIT ?" +
@@ -301,10 +297,9 @@ public class LiteBansManager {
      * Получить топ модераторов
      */
     private List<Map<String, Object>> getTopModerators(
-            LocalDateTime from, LocalDateTime to, int limit) throws SQLException {
+            Connection connection, LocalDateTime from, LocalDateTime to, int limit) throws SQLException {
         
         List<Map<String, Object>> result = new ArrayList<>();
-        Connection connection = getConnection();
         if (connection == null) {
             return result;
         }
@@ -344,10 +339,9 @@ public class LiteBansManager {
      * Получить популярные причины
      */
     private List<Map<String, Object>> getTopReasons(
-            LocalDateTime from, LocalDateTime to, int limit) throws SQLException {
+            Connection connection, LocalDateTime from, LocalDateTime to, int limit) throws SQLException {
         
         List<Map<String, Object>> result = new ArrayList<>();
-        Connection connection = getConnection();
         if (connection == null) {
             return result;
         }
@@ -387,14 +381,13 @@ public class LiteBansManager {
      * Получить наказания по часам
      */
     private Map<Integer, Integer> getPunishmentsByHour(
-            LocalDateTime from, LocalDateTime to) throws SQLException {
+            Connection connection, LocalDateTime from, LocalDateTime to) throws SQLException {
         
         Map<Integer, Integer> result = new HashMap<>();
         for (int i = 0; i < 24; i++) {
             result.put(i, 0);
         }
         
-        Connection connection = getConnection();
         if (connection == null) {
             return result;
         }
@@ -433,10 +426,9 @@ public class LiteBansManager {
     
     // Вспомогательные методы
     
-    private int countPunishments(String table, 
+    private int countPunishments(Connection connection, String table, 
             LocalDateTime from, LocalDateTime to) throws SQLException {
         
-        Connection connection = getConnection();
         if (connection == null) {
             return 0;
         }
@@ -454,10 +446,9 @@ public class LiteBansManager {
         }
     }
     
-    private int countActivePunishments(String table,
+    private int countActivePunishments(Connection connection, String table,
             LocalDateTime from, LocalDateTime to) throws SQLException {
         
-        Connection connection = getConnection();
         if (connection == null) {
             return 0;
         }
